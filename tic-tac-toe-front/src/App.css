@@ -1,0 +1,207 @@
+:root {
+  --bg-color: #0f172a;
+  --panel-color: #1e293b;
+  --text-color: #f8fafc;
+  --x-color: #3b82f6;
+  --o-color: #10b981;
+  --accent-glow: #f43f5e;
+}
+
+body {
+  margin: 0;
+  background-color: var(--bg-color);
+  color: var(--text-color);
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+.app-container {
+  max-width: 500px;
+  margin: 2rem auto;
+  padding: 1rem;
+  text-align: center;
+}
+
+h1 {
+  font-size: 2.2rem;
+  margin-bottom: 1.5rem;
+  background: linear-gradient(45deg, var(--x-color), var(--o-color));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+/* Landing Setup Mode Styles */
+.setup-screen {
+  background-color: var(--panel-color);
+  padding: 2rem;
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+}
+
+.mode-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  margin-top: 1.5rem;
+}
+
+button {
+  padding: 0.8rem 1.5rem;
+  font-size: 1.1rem;
+  font-weight: 600;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  background-color: #334155;
+  color: white;
+}
+
+button:hover {
+  filter: brightness(1.2);
+  transform: translateY(-1px);
+}
+
+/* Scoreboard Matrix Node Styles */
+.scoreboard-panel {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.score-node {
+  flex: 1;
+  background-color: var(--panel-color);
+  padding: 0.75rem;
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  border-bottom: 4px solid transparent;
+}
+
+.score-node.X { border-bottom-color: var(--x-color); }
+.score-node.O { border-bottom-color: var(--o-color); }
+
+.score-node .label {
+  font-size: 0.9rem;
+  color: #94a3b8;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.score-node .count {
+  font-size: 1.6rem;
+  font-weight: bold;
+  margin-top: 0.25rem;
+}
+
+/* Status Headers Context Box */
+.status-bar {
+  background-color: #1e293b;
+  padding: 0.6rem;
+  border-radius: 6px;
+  margin-bottom: 1rem;
+}
+
+.status-text {
+  font-size: 1.1rem;
+}
+
+.status-text .X { color: var(--x-color); }
+.status-text .O { color: var(--o-color); }
+.win { color: #f59e0b; font-weight: bold; }
+
+/* Grid Canvas Layout Mapping */
+.grid-container {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  background-color: #020617;
+  padding: 8px;
+  border-radius: 10px;
+  margin-bottom: 1rem;
+}
+
+.grid-row {
+  display: flex;
+  gap: 5px;
+  justify-content: center;
+}
+
+.grid-cell {
+  width: 65px;
+  height: 65px;
+  background-color: var(--panel-color);
+  font-size: 1.8rem;
+  font-weight: bold;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  transition: all 0.1s ease;
+}
+
+.grid-cell:hover {
+  background-color: #334155;
+}
+
+/* Structural Color Markers */
+.grid-cell.X { color: var(--x-color); }
+.grid-cell.O { color: var(--o-color); }
+
+/* Double Highlight Configuration for Points */
+.grid-cell.winner-highlight {
+  background-color: var(--accent-glow) !important;
+  color: white !important;
+  animation: pulse 1.2s infinite alternate;
+}
+
+@keyframes pulse {
+  from { box-shadow: inset 0 0 4px rgba(255,255,255,0.4); }
+  to { box-shadow: 0 0 12px var(--accent-glow); }
+}
+
+.back-btn {
+  background-color: #475569;
+  font-size: 0.9rem;
+  padding: 0.5rem 1rem;
+}
+
+.divider {
+  margin: 2rem 0;
+  border: 0;
+  height: 1px;
+  background: #334155;
+}
+
+/* Leaderboard Content Layout */
+.leaderboard-section {
+  background-color: var(--panel-color);
+  padding: 1.5rem;
+  border-radius: 12px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.2);
+}
+
+.score-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 1rem;
+}
+
+.score-table th, .score-table td {
+  padding: 0.75rem;
+  text-align: center;
+  border-bottom: 1px solid #334155;
+}
+
+.score-table th {
+  color: #64748b;
+  font-weight: 600;
+}
+
+.no-scores {
+  color: #475569;
+  font-style: italic;
+}

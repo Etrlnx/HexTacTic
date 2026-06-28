@@ -1,4 +1,3 @@
-
 # Resonance-Toe (6x6 Tic-Tac-Toe with FastAPI & React)
 
 A full-stack, 6x6 modern Tic-Tac-Toe game implementing an atypical **5-in-a-row winning condition**. Built with a high-performance **FastAPI** backend, a lightweight **SQLite** persistence layer, and a highly responsive **React (Vite)** frontend, this architecture shifts core game-state arbitration and validation entirely to the server side.
@@ -15,6 +14,7 @@ A full-stack, 6x6 modern Tic-Tac-Toe game implementing an atypical **5-in-a-row 
 ## 📊 Architecture & Data Flow
 
 
+```
 
 ┌────────────────────────┐                   ┌────────────────────────┐
 │    React Frontend      │   HTTP POST/GET   │    FastAPI Backend     │
@@ -28,16 +28,19 @@ A full-stack, 6x6 modern Tic-Tac-Toe game implementing an atypical **5-in-a-row 
 │  & Live Score Panel    │                   │      (scores.db)       │
 └────────────────────────┘                   └────────────────────────┘
 
-
+```
 
 1. **Initialization:** The UI calls `/api/start` to declare game modes (`vs_player` or `vs_system`) and set up token configurations.
 2. **Turn Execution:** Every square interaction triggers a payload containing raw matrix indices `(row, col)` sent to `/api/move`. 
 3. **State Processing:** The backend evaluates cell validity, registers the coordinates, updates matrix arrays, and evaluates directional geometry vectors to detect a win or tie condition.
 4. **State Deserialization:** The updated game-state package updates the UI context, highlighting winning coordinates and handling endgame logic.
 
+---
 
 ## 🛠️ Project Structure
 
+
+```
 
 ├── app.py              # FastAPI Main Application & Routing Pipeline
 ├── script.py           # Core Game Logic (Matrix Evaluations & Coordinate Processing)
@@ -46,6 +49,7 @@ A full-stack, 6x6 modern Tic-Tac-Toe game implementing an atypical **5-in-a-row 
 ├── App.css             # Root Variable Styling & Pulse Animation Configurations
 └── README.md           # Documentation
 
+```
 
 ---
 
@@ -89,7 +93,5 @@ npm run dev
 * **Heuristic AI Engine:** Upgrade the current randomizer system to a Minimax algorithm enhanced with Alpha-Beta Pruning or a heuristic-based evaluation engine optimized for larger (6x6) search-spaces.
 * **Dynamic Difficulty Tiers:** Implement multi-level difficulty settings (`Easy`, `Medium`, `Hard`) by introducing bounded depth limits and probabilistic non-optimal choices inside the AI turn analyzer.
 * **Advanced Server Architecture:** Scale up the persistence layer to track deeper match statistics, such as player loss ratios, specific win margins against the bot, and timestamped history tracking.
-
-```
 
 ```

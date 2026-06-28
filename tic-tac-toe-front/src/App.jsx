@@ -94,7 +94,7 @@ function App() {
 
       // Check if this move filled the final box
       if (data.is_filled) {
-        processEndgame(data, cleanName || playerName);
+        processEndgame(data, playerName);
       }
     } catch (err) {
       console.error("Turn execution failed:", err);
@@ -144,7 +144,7 @@ function App() {
 
   return (
     <div className="app-container">
-      <h1>6x6 Multipoint Accumulator</h1>
+      <h1>Welcome</h1>
 
       {!gameStarted ? (
         <div className="setup-screen">

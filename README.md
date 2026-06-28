@@ -1,4 +1,4 @@
-# Resonance-Toe (6x6 Tic-Tac-Toe with FastAPI & React)
+# 6x6 Tic-Tac-Toe with FastAPI & React
 
 A full-stack, 6x6 modern Tic-Tac-Toe game implementing an atypical **5-in-a-row winning condition**. Built with a high-performance **FastAPI** backend, a lightweight **SQLite** persistence layer, and a highly responsive **React (Vite)** frontend, this architecture shifts core game-state arbitration and validation entirely to the server side.
 

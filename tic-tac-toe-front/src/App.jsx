@@ -1,69 +1,67 @@
 import React, { useState, useEffect } from 'react';
 import './App.css';
 
+const API_BASE_URL = 'http://localhost:8000/api';
+
 function App() {
-  // Core Game State synced from FastAPI Backend
+  // Game state
   const [board, setBoard] = useState(Array(6).fill(Array(6).fill("")));
   const [currentPlayer, setCurrentPlayer] = useState("X");
-  const [scores, setScores] = useState({ X: 0, O: 0 });
-  const [winningSegments, setWinningSegments] = useState([]);
-  const [isFilled, setIsFilled] = useState(false);
-  const [winner, setWinner] = useState(null);
+  const [winnerCombo, setWinnerCombo] = useState([]);
+  const [hasWinner, setHasWinner] = useState(false);
+  const [isTied, setIsTied] = useState(false);
   
-  // Custom Frontend Management States
+  // frontend management states
   const [gameMode, setGameMode] = useState("vs_player");
+  const [difficulty, setDifficulty] = useState("medium"); // of 3 choices
   const [gameStarted, setGameStarted] = useState(false);
   const [playerName, setPlayerName] = useState("");
-  const [leaderboard, setLeaderboard] = useState([]);
+  const [playerStats, setPlayerStats] = useState(null);
 
-  // Fetch local scores automatically when the website mounts
-  useEffect(() => {
-    fetchScores();
-  }, []);
+  // Sync state 
+  const syncGameState = (data) => {
+    setBoard(data.board);
+    setCurrentPlayer(data.current_player);
+    setWinnerCombo(data.winner_combo || []);
+    setHasWinner(data.has_winner);
+    setIsTied(data.is_tied);
+  };
 
-  const fetchScores = async () => {
+
+  const fetchPlayerProfile = async (username) => {
     try {
-      const response = await fetch('http://localhost:5000/api/scores');
+      const response = await fetch(`${API_BASE_URL}/player/${username}`);
       const data = await response.json();
-      setLeaderboard(data);
+      if (!data.error && !data.message) {
+        setPlayerStats(data);
+      } else {
+        setPlayerStats(null); 
+      }
     } catch (err) {
-      console.error("Failed to fetch leaderboard records:", err);
+      console.error("Failed to fetch Postgres records:", err);
     }
   };
 
-  // Pre-game Prompt Sequence
   const handleGameInitialization = async (mode) => {
-    // 1. Gather player name details immediately upon choosing mode
-    const nameInput = prompt("Enter your name to register this play session:");
+    const nameInput = prompt("Enter your username to register this play session:");
     if (!nameInput || nameInput.trim() === "") {
       alert("A valid user name identifier is mandatory to start!");
       return;
     }
     const cleanName = nameInput.trim();
 
-    // 2. If vs_system, let them choose if they want to go first
-    let choice = "X"; 
-    if (mode === "vs_system") {
-      const goFirst = window.confirm("Would you like to take the opening move? (Click OK for Yes, Cancel for Bot First)");
-      choice = goFirst ? "X" : "O";
-    }
+    // Fetch historical records for this player immediately
+    await fetchPlayerProfile(cleanName);
 
     try {
-      const response = await fetch('http://localhost:5000/api/start', {
+      const response = await fetch(`${API_BASE_URL}/start`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mode: mode, starting_player: choice })
+        body: JSON.stringify({ mode: mode, difficulty: difficulty })
       });
       const data = await response.json();
 
-      // Sync the backend's initial game state with React
-      setBoard(data.board);
-      setCurrentPlayer(data.current_player);
-      setScores(data.scores);
-      setWinningSegments(data.winning_segments);
-      setIsFilled(data.is_filled);
-      setWinner(data.winner);
-      
+      syncGameState(data);
       setPlayerName(cleanName);
       setGameMode(mode);
       setGameStarted(true);
@@ -72,83 +70,87 @@ function App() {
     }
   };
 
-  // Turn Trigger
   const handleCellClick = async (row, col) => {
-    if (isFilled) return; // Prevent clicking if the grid is completely full
+    if (hasWinner || isTied) return; // Prevent extra turns if game is complete
 
     try {
-      const response = await fetch('http://localhost:5000/api/move', {
+      const response = await fetch(`${API_BASE_URL}/move`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ row, col })
       });
       const data = await response.json();
 
-      // Update state live
-      setBoard(data.board);
-      setCurrentPlayer(data.current_player);
-      setScores(data.scores);
-      setWinningSegments(data.winning_segments);
-      setIsFilled(data.is_filled);
-      setWinner(data.winner);
+      syncGameState(data);
 
-      // Check if this move filled the final box
-      if (data.is_filled) {
-        processEndgame(data, playerName);
+      // Evaluate endgame status directly from the state results
+      if (data.has_winner || data.is_tied) {
+        await processEndgame(data, playerName);
       }
     } catch (err) {
       console.error("Turn execution failed:", err);
     }
   };
 
-  // Endgame evaluation and Leaderboard filtering
   const processEndgame = async (finalData, activePlayerName) => {
-    // Constraint Rule: If Bot wins or ties against Human, stop right here
-    if (finalData.game_mode === "vs_system" && finalData.winner !== "X") {
-      alert(`Game Over! Final scores: ${activePlayerName} (X): ${finalData.scores.X} vs Bot (O): ${finalData.scores.O}. The bot wins/ties, blocking leaderboard submission.`);
-      return;
-    }
-
-    let highscoreWinnerName = activePlayerName;
+    let result = "draws";
     
-    // Manage nomenclature formatting for local PVP
-    if (finalData.game_mode === "vs_player") {
-      if (finalData.winner === "O") highscoreWinnerName = "Player O";
-      else if (finalData.winner === "Tie") {
-        alert(`Match concluded in an absolute tie! (${finalData.scores.X} vs ${finalData.scores.O}) No database entries added.`);
-        return;
+    if (finalData.has_winner) {
+      // In vs_system, if current_player is 'O', 'X' just moved and won!
+      // (Because process_move toggles current_player instantly at the end of the turn)
+      const humanWon = finalData.current_player === "O"; 
+      
+      if (gameMode === "vs_system") {
+        result = humanWon ? "wins" : "losses";
+        alert(humanWon ? "🎉 You beat the AI!" : "🤖 The AI outsmarted you. Game Over!");
+      } else {
+        alert(`Match completed! Player ${finalData.current_player === "O" ? "X" : "O"} wins!`);
+        return; // Only log against AI for this dashboard scoreboard layout
       }
+    } else if (finalData.is_tied) {
+      alert("Match concluded in an absolute tie!");
+      if (gameMode !== "vs_system") return;
     }
 
-    alert(`Congratulations ${highscoreWinnerName}! Submitting your victory track record.`);
-
+    // Direct match recording upload transaction targeting Postgres
     try {
-      const response = await fetch('http://localhost:5000/api/scores', {
+      const response = await fetch(`${API_BASE_URL}/record-match`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ player_name: highscoreWinnerName })
+        body: JSON.stringify({
+          username: activePlayerName,
+          difficulty: difficulty,
+          result: result
+        })
       });
-      const updatedLeaderboard = await response.json();
-      setLeaderboard(updatedLeaderboard);
+      const updatedStats = await response.json();
+      setPlayerStats(updatedStats);
     } catch (err) {
-      console.error("Highscore database sync failed:", err);
+      console.error("Postgres dashboard sync failed:", err);
     }
   };
 
-  // Helper styling module to evaluate if a square belongs to a scored triplet path
   const isCoordinateInScorePath = (r, c) => {
-    return winningSegments.some(segment => 
-      segment.some(([sr, sc]) => sr === r && sc === c)
-    );
+    return winnerCombo.some(([sr, sc]) => sr === r && sc === c);
   };
 
   return (
     <div className="app-container">
-      <h1>Welcome</h1>
+      <h1>6x6 Tic-Tac-Toe Engine</h1>
 
       {!gameStarted ? (
         <div className="setup-screen">
-          <h2>Select Game Mode</h2>
+          <h2>Select Configuration</h2>
+          
+          <div className="difficulty-selector">
+            <label>AI Difficulty: </label>
+            <select value={difficulty} onChange={(e) => setDifficulty(e.target.value)}>
+              <option value="easy">Easy (Random)</option>
+              <option value="medium">Medium (Heuristic Balance)</option>
+              <option value="hard">Hard (Heuristic Aggressive)</option>
+            </select>
+          </div>
+
           <div className="mode-buttons">
             <button onClick={() => handleGameInitialization("vs_player")}>👥 Player vs Player</button>
             <button onClick={() => handleGameInitialization("vs_system")}>🤖 Player vs System (AI)</button>
@@ -156,29 +158,16 @@ function App() {
         </div>
       ) : (
         <div className="game-screen">
-          {/* Top Score Matrix Display */}
-          <div className="scoreboard-panel">
-            <div className="score-node X">
-              <span className="label">{gameMode === "vs_system" ? playerName : "Player X"}</span>
-              <span className="count">{scores.X} pts</span>
-            </div>
-            <div className="score-node O">
-              <span className="label">{gameMode === "vs_system" ? "Bot" : "Player O"}</span>
-              <span className="count">{scores.O} pts</span>
-            </div>
-          </div>
-
           <div className="status-bar">
-            {isFilled ? (
-              <span className="status-text win">
-                🏆 Winner: {winner === "Tie" ? "It's a Tie!" : winner}
-              </span>
+            {hasWinner ? (
+              <span className="status-text win">🏆 Match Decided!</span>
+            ) : isTied ? (
+              <span className="status-text tie">🤝 Match Tied!</span>
             ) : (
               <span className="status-text">Active Turn: <strong className={currentPlayer}>{currentPlayer}</strong></span>
             )}
           </div>
 
-          {/* Grid Layout Canvas */}
           <div className="grid-container">
             {board.map((row, rowIndex) => (
               <div key={rowIndex} className="grid-row">
@@ -201,30 +190,45 @@ function App() {
 
       <hr className="divider" />
 
-      {/* Leaderboard Table Footer Rendering */}
+      {/* Real-time Postgres Dashboard View */}
       <div className="leaderboard-section">
-        <h2>🏆 Local High Scores (Top Wins)</h2>
-        {leaderboard.length === 0 ? (
-          <p className="no-scores">No wins recorded yet.</p>
-        ) : (
-          <table className="score-table">
-            <thead>
-              <tr>
-                <th>Rank</th>
-                <th>Player Name</th>
-                <th>Total Wins</th>
-              </tr>
-            </thead>
-            <tbody>
-              {leaderboard.map((row, index) => (
-                <tr key={index}>
-                  <td>{index + 1}</td>
-                  <td>{row.player_name}</td>
-                  <td>{row.wins}</td>
+        <h2>📊 Active Player Postgres Dashboard</h2>
+        {playerStats ? (
+          <div className="stats-container">
+            <h3>Player Profile: <strong>{playerName}</strong></h3>
+            <table className="score-table">
+              <thead>
+                <tr>
+                  <th>Difficulty</th>
+                  <th>Wins</th>
+                  <th>Losses</th>
+                  <th>Draws</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>🟢 Easy</td>
+                  <td>{playerStats.easy_wins}</td>
+                  <td>{playerStats.easy_losses}</td>
+                  <td>{playerStats.easy_draws}</td>
+                </tr>
+                <tr>
+                  <td>🟡 Medium</td>
+                  <td>{playerStats.medium_wins}</td>
+                  <td>{playerStats.medium_losses}</td>
+                  <td>{playerStats.medium_draws}</td>
+                </tr>
+                <tr>
+                  <td>🔴 Hard</td>
+                  <td>{playerStats.hard_wins}</td>
+                  <td>{playerStats.hard_losses}</td>
+                  <td>{playerStats.hard_draws}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <p className="no-scores">Log in above to view historical Postgres stats tracking records.</p>
         )}
       </div>
     </div>

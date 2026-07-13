@@ -162,10 +162,18 @@ button:hover {
   to { box-shadow: 0 0 12px var(--accent-glow); }
 }
 
+
+
 .back-btn {
-  background-color: #475569;
-  font-size: 0.9rem;
-  padding: 0.5rem 1rem;
+  background-color: #555;
+  color: white;
+  border: none;
+}
+
+.play-again-btn {
+  background-color: #28a745; 
+  color: white;
+  border: none;
 }
 
 .divider {

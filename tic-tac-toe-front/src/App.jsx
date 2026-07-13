@@ -4,21 +4,19 @@ import './App.css';
 const API_BASE_URL = 'http://localhost:8000/api';
 
 function App() {
-  // Game state
   const [board, setBoard] = useState(Array(6).fill(Array(6).fill("")));
   const [currentPlayer, setCurrentPlayer] = useState("X");
   const [winnerCombo, setWinnerCombo] = useState([]);
   const [hasWinner, setHasWinner] = useState(false);
   const [isTied, setIsTied] = useState(false);
   
-  // frontend management states
   const [gameMode, setGameMode] = useState("vs_player");
-  const [difficulty, setDifficulty] = useState("medium"); // of 3 choices
+  const [difficulty, setDifficulty] = useState("medium"); 
   const [gameStarted, setGameStarted] = useState(false);
   const [playerName, setPlayerName] = useState("");
   const [playerStats, setPlayerStats] = useState(null);
+  const [playerMarker, setPlayerMarker] = useState("X"); // Tracks if user is X or O
 
-  // Sync state 
   const syncGameState = (data) => {
     setBoard(data.board);
     setCurrentPlayer(data.current_player);
@@ -27,7 +25,6 @@ function App() {
     setIsTied(data.is_tied);
   };
 
-
   const fetchPlayerProfile = async (username) => {
     try {
       const response = await fetch(`${API_BASE_URL}/player/${username}`);
@@ -35,7 +32,7 @@ function App() {
       if (!data.error && !data.message) {
         setPlayerStats(data);
       } else {
-        setPlayerStats(null); 
+        setPlayerStats(null);
       }
     } catch (err) {
       console.error("Failed to fetch Postgres records:", err);
@@ -50,19 +47,26 @@ function App() {
     }
     const cleanName = nameInput.trim();
 
-    // Fetch historical records for this player immediately
+    // Choice selector for AI Mode
+    let chosenMarker = "X";
+    if (mode === "vs_system") {
+      const goFirst = window.confirm("Would you like to take the opening move as X? (Click OK for X, Cancel to let Bot play first as X while you play as O)");
+      chosenMarker = goFirst ? "X" : "O";
+    }
+
     await fetchPlayerProfile(cleanName);
 
     try {
       const response = await fetch(`${API_BASE_URL}/start`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mode: mode, difficulty: difficulty })
+        body: JSON.stringify({ mode: mode, difficulty: difficulty, starting_player: chosenMarker })
       });
       const data = await response.json();
 
       syncGameState(data);
       setPlayerName(cleanName);
+      setPlayerMarker(chosenMarker);
       setGameMode(mode);
       setGameStarted(true);
     } catch (err) {
@@ -70,8 +74,23 @@ function App() {
     }
   };
 
+  // Dedicated quick restart handler using current configurations
+  const handlePlayAgain = async () => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/start`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mode: gameMode, difficulty: difficulty, starting_player: playerMarker })
+      });
+      const data = await response.json();
+      syncGameState(data);
+    } catch (err) {
+      console.error("Quick restart sequence broke:", err);
+    }
+  };
+
   const handleCellClick = async (row, col) => {
-    if (hasWinner || isTied) return; // Prevent extra turns if game is complete
+    if (hasWinner || isTied) return; 
 
     try {
       const response = await fetch(`${API_BASE_URL}/move`, {
@@ -83,7 +102,6 @@ function App() {
 
       syncGameState(data);
 
-      // Evaluate endgame status directly from the state results
       if (data.has_winner || data.is_tied) {
         await processEndgame(data, playerName);
       }
@@ -96,23 +114,24 @@ function App() {
     let result = "draws";
     
     if (finalData.has_winner) {
-      // In vs_system, if current_player is 'O', 'X' just moved and won!
-      // (Because process_move toggles current_player instantly at the end of the turn)
-      const humanWon = finalData.current_player === "O"; 
+      // Corrected Flag Mapping: Because backend swaps player markers on turn end, 
+      // if finalData.current_player matches your token, it means the *other* entity (AI) won!
+      const humanWon = finalData.current_player !== playerMarker; 
       
       if (gameMode === "vs_system") {
         result = humanWon ? "wins" : "losses";
         alert(humanWon ? "🎉 You beat the AI!" : "🤖 The AI outsmarted you. Game Over!");
       } else {
-        alert(`Match completed! Player ${finalData.current_player === "O" ? "X" : "O"} wins!`);
-        return; // Only log against AI for this dashboard scoreboard layout
+        // PvP Win Messages
+        const winningToken = finalData.current_player === "O" ? "X" : "O";
+        alert(`Match completed! Player ${winningToken} wins!`);
+        return; 
       }
     } else if (finalData.is_tied) {
       alert("Match concluded in an absolute tie!");
       if (gameMode !== "vs_system") return;
     }
 
-    // Direct match recording upload transaction targeting Postgres
     try {
       const response = await fetch(`${API_BASE_URL}/record-match`, {
         method: 'POST',
@@ -184,13 +203,17 @@ function App() {
             ))}
           </div>
           
-          <button className="back-btn" onClick={() => setGameStarted(false)}>⚙️ Main Menu</button>
+          <div className="action-buttons-row">
+            {(hasWinner || isTied) && (
+              <button className="play-again-btn" onClick={handlePlayAgain}>Play Again</button>
+            )}
+            <button className="back-btn" onClick={() => setGameStarted(false)}>Main Menu</button>
+          </div>
         </div>
       )}
 
       <hr className="divider" />
 
-      {/* Real-time Postgres Dashboard View */}
       <div className="leaderboard-section">
         <h2>📊 Active Player Postgres Dashboard</h2>
         {playerStats ? (

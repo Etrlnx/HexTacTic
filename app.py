@@ -22,7 +22,8 @@ game = TicTacToeGame()
 
 class StartGameRequest(BaseModel):
     mode: str = "vs_player" 
-    difficulty: Optional[str] = "medium" # 'easy', 'medium', 'hard'
+    difficulty: Optional[str] = "medium"
+    starting_player: Optional[str] = "X"  # "X" or "O"
 
 class MoveRequest(BaseModel):
     row: int
@@ -31,7 +32,7 @@ class MoveRequest(BaseModel):
 class RecordMatchRequest(BaseModel):
     username: str
     difficulty: str
-    result: str  # 'wins', 'losses', 'draws'
+    result: str  
 
 
 @app.get("/api/state")
@@ -45,19 +46,30 @@ def start_game(payload: StartGameRequest):
     game.game_mode = payload.mode
     if payload.difficulty in ["easy", "medium", "hard"]:
         game.difficulty = payload.difficulty
+        
+    # Sync structural side selection
+    if payload.mode == "vs_system" and payload.starting_player == "O":
+        # Player is O, so AI makes the opening move as X instantly
+        ai_move = game.get_ai_move()
+        if ai_move:
+            game.process_move(ai_move[0], ai_move[1])
+            
     return game.get_state()
 
 
 @app.post("/api/move")
 def make_move(payload: MoveRequest):
     if game.is_valid_move(payload.row, payload.col):
+        # Human processes their move
+        player_marker = game.current_player
         game.process_move(payload.row, payload.col)
         
         state = game.get_state()
         if state["has_winner"] or state["is_tied"]:
             return state
 
-        if game.game_mode == "vs_system" and game.current_player == "O":
+        # AI counters automatically using the opposite token marker
+        if game.game_mode == "vs_system" and game.current_player != player_marker:
             ai_move = game.get_ai_move()
             if ai_move:
                 game.process_move(ai_move[0], ai_move[1])
@@ -67,15 +79,12 @@ def make_move(payload: MoveRequest):
 
 @app.get("/api/player/{username}")
 def get_player_profile(username: str):
-    """Fetches full database stats profile tracking block for the active user."""
     return get_player_stats(username)
 
 
 @app.post("/api/record-match")
 def record_match(payload: RecordMatchRequest):
-    """Executes the dynamic UPSERT transaction logging historical matches."""
     if payload.result not in ["wins", "losses", "draws"]:
         raise HTTPException(status_code=400, detail="Invalid result token string")
-    
     update_player_record(payload.username, payload.difficulty, payload.result)
     return get_player_stats(payload.username)

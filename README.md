@@ -2,7 +2,7 @@
 
 A full-stack, 6x6 modern Tic-Tac-Toe game implementing an atypical **5-in-a-row winning condition**. Built with a high-performance **FastAPI** backend, a lightweight **SQLite** persistence layer, and a highly responsive **React (Vite)** frontend, this architecture shifts core game-state arbitration and validation entirely to the server side.
 
-## 🚀 Features
+## Features
 
 - **Dynamic 6x6 Grid Mapping:** Expands traditional grid dimensions to a 6x6 framework requiring a 5-token streak (horizontal, vertical, or diagonal) to secure a win.
 - **State-Synchronized Architecture:** The React UI functions as a pure presentation layer; all coordinate validations, turn-toggling, and streak computations are managed dynamically via FastAPI endpoints.
@@ -11,7 +11,7 @@ A full-stack, 6x6 modern Tic-Tac-Toe game implementing an atypical **5-in-a-row 
 
 ---
 
-## 📊 Architecture & Data Flow
+## Architecture & Data Flow
 
 
 ```
@@ -37,7 +37,7 @@ A full-stack, 6x6 modern Tic-Tac-Toe game implementing an atypical **5-in-a-row 
 
 ---
 
-## 🛠️ Project Structure
+## Project Structure
 
 
 ```
@@ -88,7 +88,7 @@ npm run dev
 
 ---
 
-## 🔮 Roadmap & Technical Upgrades
+## Roadmap & Technical Upgrades
 
 * **Heuristic AI Engine:** Upgrade the current randomizer system to a Minimax algorithm enhanced with Alpha-Beta Pruning or a heuristic-based evaluation engine optimized for larger (6x6) search-spaces.
 * **Dynamic Difficulty Tiers:** Implement multi-level difficulty settings (`Easy`, `Medium`, `Hard`) by introducing bounded depth limits and probabilistic non-optimal choices inside the AI turn analyzer.

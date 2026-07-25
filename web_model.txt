@@ -1,0 +1,39 @@
+website and ai model interaction
+graph TD
+    %% Styling Definitions
+    classDef client fill:#2B6CB0,stroke:#2C5282,color:#FFF;
+    classDef api fill:#2F855A,stroke:#276749,color:#FFF;
+    classDef db fill:#D69E2E,stroke:#B7791F,color:#FFF;
+    classDef ai fill:#805AD5,stroke:#6B46C1,color:#FFF;
+    classDef net fill:#E53E3E,stroke:#C53030,color:#FFF;
+
+    subgraph ClientLayer ["Frontend (Client Device)"]
+        UI["React Web Application (App.jsx)"]:::client
+    end
+
+    subgraph OverlayNetwork ["Secure Network Layer"]
+        TS["Tailscale Private Mesh Network"]:::net
+    end
+
+    subgraph ServerLayer ["Backend Architecture (Home Server)"]
+        FastAPI["FastAPI REST API (main.py)"]:::api
+        Engine["Stateful Rules Engine (script.py)"]:::api
+        DB[("PostgreSQL Database")]:::db
+        Inference["AI Inference Service (ai_service.py)"]:::ai
+    end
+
+    subgraph TrainingNode ["Compute Layer (Development PC)"]
+        PyTorchTrainer["PyTorch Self-Play Engine (trainer.py)"]:::ai
+        ModelWeights[("Saved Weights (dqn_model_weights.pth)")]:::ai
+    end
+
+    %% Flow Connections
+    UI <-->|HTTPS / REST API| TS
+    TS <-->|Secure Tunnel| FastAPI
+    
+    FastAPI <-->|State Validation & Win Checks| Engine
+    FastAPI <-->|Persist User Profiles & Match History| DB
+    FastAPI <-->|Fetch AI Actions| Inference
+    
+    PyTorchTrainer -->|Offline Training & Weights Export| ModelWeights
+    ModelWeights -.->|Loaded at Startup| Inference

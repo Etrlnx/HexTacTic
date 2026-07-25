@@ -9,6 +9,7 @@ function App() {
   const [winnerCombo, setWinnerCombo] = useState([]);
   const [hasWinner, setHasWinner] = useState(false);
   const [isTied, setIsTied] = useState(false);
+  const [scores, setScores] = useState({X:0 ,O:0});
   
   const [gameMode, setGameMode] = useState("vs_player");
   const [difficulty, setDifficulty] = useState("medium"); 
@@ -23,6 +24,7 @@ function App() {
     setWinnerCombo(data.winner_combo || []);
     setHasWinner(data.has_winner);
     setIsTied(data.is_tied);
+    setScores(data.scores || {X:1, O:0})
   };
 
   const fetchPlayerProfile = async (username) => {
@@ -120,7 +122,7 @@ function App() {
       
       if (gameMode === "vs_system") {
         result = humanWon ? "wins" : "losses";
-        alert(humanWon ? "🎉 You beat the AI!" : "🤖 The AI outsmarted you. Game Over!");
+        alert(humanWon ? "You beat the AI!" : "The AI outsmarted you. Game Over!");
       } else {
         // PvP Win Messages
         const winningToken = finalData.current_player === "O" ? "X" : "O";
@@ -171,17 +173,20 @@ function App() {
           </div>
 
           <div className="mode-buttons">
-            <button onClick={() => handleGameInitialization("vs_player")}>👥 Player vs Player</button>
-            <button onClick={() => handleGameInitialization("vs_system")}>🤖 Player vs System (AI)</button>
+            <button onClick={() => handleGameInitialization("vs_player")}>Player vs Player</button>
+            <button onClick={() => handleGameInitialization("vs_system")}>Player vs System (AI)</button>
           </div>
         </div>
       ) : (
         <div className="game-screen">
           <div className="status-bar">
+            <div className="score-display" style={{ marginBottom: '10px', fontSize: '1.2rem' }} >
+              Points Scoreboard: <span className="X"> X: {scores.X} /3</span> | <span className = "O">O: {scores.O}/3</span>
+              </div>
             {hasWinner ? (
-              <span className="status-text win">🏆 Match Decided!</span>
+              <span className="status-text win">Match Decided!</span>
             ) : isTied ? (
-              <span className="status-text tie">🤝 Match Tied!</span>
+              <span className="status-text tie">Match Tied!</span>
             ) : (
               <span className="status-text">Active Turn: <strong className={currentPlayer}>{currentPlayer}</strong></span>
             )}
@@ -215,7 +220,7 @@ function App() {
       <hr className="divider" />
 
       <div className="leaderboard-section">
-        <h2>📊 Active Player Postgres Dashboard</h2>
+        <h2>Active Player Postgres Dashboard</h2>
         {playerStats ? (
           <div className="stats-container">
             <h3>Player Profile: <strong>{playerName}</strong></h3>
@@ -230,19 +235,19 @@ function App() {
               </thead>
               <tbody>
                 <tr>
-                  <td>🟢 Easy</td>
+                  <td>Easy</td>
                   <td>{playerStats.easy_wins}</td>
                   <td>{playerStats.easy_losses}</td>
                   <td>{playerStats.easy_draws}</td>
                 </tr>
                 <tr>
-                  <td>🟡 Medium</td>
+                  <td>Medium</td>
                   <td>{playerStats.medium_wins}</td>
                   <td>{playerStats.medium_losses}</td>
                   <td>{playerStats.medium_draws}</td>
                 </tr>
                 <tr>
-                  <td>🔴 Hard</td>
+                  <td>Hard</td>
                   <td>{playerStats.hard_wins}</td>
                   <td>{playerStats.hard_losses}</td>
                   <td>{playerStats.hard_draws}</td>

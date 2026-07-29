@@ -12,7 +12,7 @@ function App() {
   const [scores, setScores] = useState({X:0 ,O:0});
   
   const [gameMode, setGameMode] = useState("vs_player");
-  const [difficulty, setDifficulty] = useState("medium"); 
+  const [difficulty, setDifficulty] = useState("Normal"); 
   const [gameStarted, setGameStarted] = useState(false);
   const [playerName, setPlayerName] = useState("");
   const [playerStats, setPlayerStats] = useState(null);
@@ -164,11 +164,14 @@ function App() {
           <h2>Select Configuration</h2>
           
           <div className="difficulty-selector">
-            <label>AI Difficulty: </label>
+            <label>Ass-whoopin Level: </label>
             <select value={difficulty} onChange={(e) => setDifficulty(e.target.value)}>
-              <option value="easy">Easy (Random)</option>
-              <option value="medium">Medium (Heuristic Balance)</option>
-              <option value="hard">Hard (Heuristic Aggressive)</option>
+              <option value="Easy">Easy</option>
+              <option value="Normal">Normal</option>
+              <option value="Hard">Hard</option>
+              {(playerStats?.highest_difficulty === "Hard" || playerStats?.highest_difficulty === "Nightmare") && (
+                <option value="Nightmare">Nightmare (DDQN AI)</option>
+              )} {/* Only show Nightmare if they have cleared Hard or already reached Nightmare */}
             </select>
           </div>
 
@@ -224,36 +227,12 @@ function App() {
         {playerStats ? (
           <div className="stats-container">
             <h3>Player Profile: <strong>{playerName}</strong></h3>
-            <table className="score-table">
-              <thead>
-                <tr>
-                  <th>Difficulty</th>
-                  <th>Wins</th>
-                  <th>Losses</th>
-                  <th>Draws</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr>
-                  <td>Easy</td>
-                  <td>{playerStats.easy_wins}</td>
-                  <td>{playerStats.easy_losses}</td>
-                  <td>{playerStats.easy_draws}</td>
-                </tr>
-                <tr>
-                  <td>Medium</td>
-                  <td>{playerStats.medium_wins}</td>
-                  <td>{playerStats.medium_losses}</td>
-                  <td>{playerStats.medium_draws}</td>
-                </tr>
-                <tr>
-                  <td>Hard</td>
-                  <td>{playerStats.hard_wins}</td>
-                  <td>{playerStats.hard_losses}</td>
-                  <td>{playerStats.hard_draws}</td>
-                </tr>
-              </tbody>
-            </table>
+            <div className="difficulty-badge-container">
+              <span className="difficulty-label">Highest Difficulty Reached:</span>
+              <span className={`difficulty-badge ${playerStats.highest_difficulty.toLowerCase()}`}>
+                {playerStats.highest_difficulty}
+              </span>
+            </div>
           </div>
         ) : (
           <p className="no-scores">Log in above to view historical Postgres stats tracking records.</p>

@@ -3,10 +3,10 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
-  "scripts": {
-    "dev": "vite",
+"scripts": {
+    "dev": "concurrently \"npm run backend\" \"npm run frontend\"",
+    "frontend": "vite",
     "backend": "..\\.venv\\Scripts\\python.exe -m uvicorn app:app --app-dir .. --host 127.0.0.1 --port 8000 --reload",
-    "start": "concurrently \"npm run backend\" \"npm run dev\"",
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview"

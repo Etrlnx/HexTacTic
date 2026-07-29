@@ -1,38 +1,74 @@
-# app.py
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware  
 from pydantic import BaseModel
-from typing import Optional
-
+from typing import Optional, List, Dict
 from script import TicTacToeGame
+from mimika.ai_service import GridScaleAI
 from database import init_db, update_player_record, get_player_stats
 
-app = FastAPI(title="6x6 Tic-Tac-Toe API")
+from contextlib import asynccontextmanager
+from fastapi import FastAPI
+app = FastAPI(title="6x6 Tic-Tac-Toe GridScale API")
 
+# Setup CORS - Allow local and remote access via Tailscale
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_origins=["*"],  # Adjust to specific frontend domain in production
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
+# Initialize Database & AI Engine on Startup
 init_db()
+ai = GridScaleAI()
+
+# Global Game Instance (for single-player testing; consider session IDs for multi-user)
 game = TicTacToeGame()
 
+
 class StartGameRequest(BaseModel):
-    mode: str = "vs_player" 
-    difficulty: Optional[str] = "medium"
+    mode: str = "vs_player"  # "vs_player" or "vs_system"
+    difficulty: Optional[str] = "Normal"  # "Easy", "Normal", "Hard", "Nightmare"
     starting_player: Optional[str] = "X"  # "X" or "O"
+
 
 class MoveRequest(BaseModel):
     row: int
     col: int
 
+
 class RecordMatchRequest(BaseModel):
     username: str
-    difficulty: str
-    result: str  
+    difficulty: str  # "Easy", "Normal", "Hard", "Nightmare"
+    result: str      # "win", "loss", "draw"
+
+
+def _make_ai_move():
+    """Helper function to fetch valid moves and call the DDQN model."""
+    if game._has_winner or game.is_tied():
+        return
+
+    valmoves = []
+    for r in range(6):
+        for c in range(6):
+            if game.is_valid_move(r, c):
+                valmoves.append(r * 6 + c)
+
+    if not valmoves:
+        return
+
+    # Call DDQN Inference Model
+    action_idx = ai.get_best_move(
+        current_moves=game._current_moves,
+        player_char=game.current_player,
+        valid_moves=valmoves,
+        difficulty=game.difficulty
+    )
+
+    if action_idx is not None:
+        row, col = action_idx // 6, action_idx % 6
+        game.process_move(row, col)
 
 
 @app.get("/api/state")
@@ -44,15 +80,17 @@ def get_state():
 def start_game(payload: StartGameRequest):
     game.reset_game()
     game.game_mode = payload.mode
-    if payload.difficulty in ["easy", "medium", "hard"]:
-        game.difficulty = payload.difficulty
+    
+    # Capitalize difficulty to match "Easy", "Normal", "Hard", "Nightmare"
+    diff_formatted = payload.difficulty.title()
+    if diff_formatted in ["Easy", "Normal", "Hard", "Nightmare"]:
+        game.difficulty = diff_formatted
+    else:
+        game.difficulty = "Normal"
         
-    # Sync structural side selection
+    # If system plays first (Player selected 'O'), trigger AI opening move
     if payload.mode == "vs_system" and payload.starting_player == "O":
-        # Player is O, so AI makes the opening move as X instantly
-        ai_move = game.get_ai_move()
-        if ai_move:
-            game.process_move(ai_move[0], ai_move[1])
+        _make_ai_move()
             
     return game.get_state()
 
@@ -60,7 +98,6 @@ def start_game(payload: StartGameRequest):
 @app.post("/api/move")
 def make_move(payload: MoveRequest):
     if game.is_valid_move(payload.row, payload.col):
-        # Human processes their move
         player_marker = game.current_player
         game.process_move(payload.row, payload.col)
         
@@ -68,11 +105,9 @@ def make_move(payload: MoveRequest):
         if state["has_winner"] or state["is_tied"]:
             return state
 
-        # AI counters automatically using the opposite token marker
+        # AI counters automatically using the DDQN inference engine
         if game.game_mode == "vs_system" and game.current_player != player_marker:
-            ai_move = game.get_ai_move()
-            if ai_move:
-                game.process_move(ai_move[0], ai_move[1])
+            _make_ai_move()
 
     return game.get_state()
 
@@ -84,7 +119,9 @@ def get_player_profile(username: str):
 
 @app.post("/api/record-match")
 def record_match(payload: RecordMatchRequest):
-    if payload.result not in ["wins", "losses", "draws"]:
+    valid_results = ["win", "loss", "draw", "wins", "losses", "draws"]
+    if payload.result.lower() not in valid_results:
         raise HTTPException(status_code=400, detail="Invalid result token string")
+        
     update_player_record(payload.username, payload.difficulty, payload.result)
     return get_player_stats(payload.username)

@@ -1,0 +1,59 @@
+Overall integration of the model and the website frontend + backend
+sequenceDiagram
+    autonumber
+    actor Player as React Frontend (App.jsx)
+    participant API as FastAPI Backend (app.py)
+    participant Rules as Rules Engine (script.py)
+    participant AI as DDQN Model (ai_service.py)
+    participant DB as PostgreSQL DB (database.py)
+
+    %% Session Setup & Stats Fetch
+    Player->>API: GET /api/player/{username}
+    API->>DB: SELECT * FROM player_scoreboard WHERE username
+    DB-->>API: Return Row (highest_difficulty, total_wins, etc.)
+    API-->>Player: Return Player Profile (Unlocks Nightmare if Hard reached)
+
+    %% Game Initiation
+    Player->>API: POST /api/start
+    API->>Rules: reset_game() and configure mode or difficulty
+    
+    opt Player selected "O" (AI goes first as "X")
+        API->>AI: "get_best_move(current_moves, 'X', valid_moves, difficulty)"
+        AI->>AI: Compute Tensor and Difficulty Action
+        AI-->>API: Selected Action Index
+        API->>Rules: process_move(row, col)
+    end
+    API-->>Player: Return Initialized State
+
+    %% Move Execution Sequence
+    Player->>API: POST /api/move
+    API->>Rules: "is_valid_move(row, col)"
+    
+    alt Move is Invalid
+        Rules-->>API: False
+        API-->>Player: Return Unchanged Board State
+    else Move is Valid
+        API->>Rules: process_move(row, col)
+        Rules-->>API: Current Game State
+        
+        alt Match Decided (Win / Loss / Draw)
+            API-->>Player: Return Final State
+            Player->>API: POST /api/record-match
+            API->>DB: UPSERT player_scoreboard
+            DB-->>API: Updated Scoreboard Row
+            API-->>Player: Return Updated Player Profile
+        else Game Continues -> System AI Turn
+            API->>AI: "get_best_move(current_moves, bot_char, valid_moves, difficulty)"
+            AI->>AI: Forward Pass and Difficulty Masking
+            AI-->>API: Return Action Index
+            API->>Rules: process_move(ai_row, ai_col)
+            
+            opt AI Move Ends Game
+                Player->>API: POST /api/record-match
+                API->>DB: UPSERT player_scoreboard
+                DB-->>API: Updated Row
+            end
+            
+            API-->>Player: Return Final Board State after AI Turn
+        end
+    end

@@ -8,32 +8,37 @@ graph TD
     classDef net fill:#E53E3E,stroke:#C53030,color:#FFF;
 
     subgraph ClientLayer ["Frontend (Client Device)"]
-        UI["React Web Application (App.jsx)"]:::client
+        UI["React Application (App.jsx)"]:::client
+        SingleRunner["Concurrent Execution (package.json)"]:::client
     end
 
     subgraph OverlayNetwork ["Secure Network Layer"]
         TS["Tailscale Private Mesh Network"]:::net
     end
 
-    subgraph ServerLayer ["Backend Architecture (Home Server)"]
-        FastAPI["FastAPI REST API (main.py)"]:::api
-        Engine["Stateful Rules Engine (script.py)"]:::api
-        DB[("PostgreSQL Database")]:::db
+    subgraph ServerLayer ["Backend Architecture"]
+        Lifespan["FastAPI Startup Lifespan"]:::api
+        FastAPI["FastAPI REST API (app.py)"]:::api
+        Engine["State Rules Engine (script.py)"]:::api
+        DB[("PostgreSQL DB (player_scoreboard)")]:::db
         Inference["AI Inference Service (ai_service.py)"]:::ai
     end
 
-    subgraph TrainingNode ["Compute Layer (Development PC)"]
-        PyTorchTrainer["PyTorch Self-Play Engine (trainer.py)"]:::ai
+    subgraph ModelStorage ["Model Storage Layer"]
         ModelWeights[("Saved Weights (dqn_model_weights.pth)")]:::ai
     end
 
     %% Flow Connections
-    UI <-->|HTTPS / REST API| TS
-    TS <-->|Secure Tunnel| FastAPI
+    SingleRunner -->|Starts Client and Server| UI
+    SingleRunner -->|Starts Client and Server| FastAPI
+
+    UI <-->|"HTTP / REST API (Port 8000)"| TS
+    TS <-->|Tailscale Binding / Localhost| FastAPI
     
-    FastAPI <-->|State Validation & Win Checks| Engine
-    FastAPI <-->|Persist User Profiles & Match History| DB
-    FastAPI <-->|Fetch AI Actions| Inference
+    FastAPI <-->|Validate and Process Grid State| Engine
+    FastAPI <-->|Upsert highest_difficulty and Total Stats| DB
+    FastAPI <-->|"get_best_move(difficulty)"| Inference
     
-    PyTorchTrainer -->|Offline Training & Weights Export| ModelWeights
-    ModelWeights -.->|Loaded at Startup| Inference
+    Lifespan -->|"1. Runs init_db()"| DB
+    Lifespan -->|"2. Instantiates GridScaleAI()"| Inference
+    ModelWeights -.->|Pre-loaded at Server Boot| Inference

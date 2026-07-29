@@ -1,0 +1,90 @@
+the main RL part (ai model)
+
+---
+config:
+  layout: fixed
+---
+flowchart LR
+ subgraph Environment["Game Environment"]
+        RawBoard["Current Moves Map & Token"]
+        ValidMoves["Valid Action List (0-35)"]
+        DifficultySetting["Difficulty Level (Easy/Normal/Hard/Nightmare)"]
+  end
+ subgraph Preprocessing["Tensor Preprocessing (preproc_state)"]
+        Ch0["Channel 0: Empty Cells (1/0)"]
+        Ch1["Channel 1: Self Pieces (1/0)"]
+        Ch2["Channel 2: Opponent Pieces (1/0)"]
+        TensorStack["Stacked Tensor (1, 3, 6, 6)"]
+  end
+ subgraph ModelArch["TTDQNN Architecture"]
+        Conv1["Conv2d (3 → 32, 3×3) + ReLU"]
+        Conv2["Conv2d (32 → 64, 3×3) + ReLU"]
+        Flatten["Flatten (64 × 6 × 6 = 2304)"]
+        FC1["Linear (2304 → 128) + ReLU"]
+        FC2["Linear Output Layer (128 → 36 Q-Values)"]
+  end
+ subgraph ActionSelection["Action Selection & Difficulty Scaling"]
+        DiffCheck{"Difficulty Chance Check"}
+        RandomMove["Random Choice from Valid Moves"]
+        QValues["36 Unmasked Q-Values (@torch.inference_mode)"]
+        Masking["Apply -inf to Occupied/Invalid Indices"]
+        ArgMax["np.argmax(q_masked)"]
+        SelectedAction["Selected Board Action Index (0-35)"]
+  end
+ subgraph LearningEngine["DDQN Training Engine (Offline)"]
+        Memory@{ label: "Replay Buffer: (S, A, R, S', Done)" }
+        TargetNet["Target Network (Update Sync)"]
+        Loss["MSE Loss(Q_val, Target_Q)"]
+        Backprop["Adam Optimizer Step"]
+  end
+    RawBoard --> Ch0 & Ch1 & Ch2
+    Ch0 --> TensorStack
+    Ch1 --> TensorStack
+    Ch2 --> TensorStack
+    DifficultySetting --> DiffCheck
+    DiffCheck -- Random Fallback % --> RandomMove
+    RandomMove --> SelectedAction
+    DiffCheck -- Optimal Path % --> TensorStack
+    TensorStack --> Conv1
+    Conv1 --> Conv2
+    Conv2 --> Flatten
+    Flatten --> FC1
+    FC1 --> FC2
+    FC2 --> QValues
+    QValues --> Masking
+    ValidMoves --> Masking
+    Masking --> ArgMax
+    ArgMax --> SelectedAction
+    TensorStack -. State .-> Memory
+    SelectedAction -. Action .-> Memory
+    Memory -. Sample Batch .-> Loss
+    TargetNet -. Compute Target .-> Loss
+    Loss -.-> Backprop
+
+    Memory@{ shape: cylinder}
+     RawBoard:::input
+     ValidMoves:::input
+     DifficultySetting:::input
+     Ch0:::preproc
+     Ch1:::preproc
+     Ch2:::preproc
+     TensorStack:::preproc
+     Conv1:::nn
+     Conv2:::nn
+     Flatten:::nn
+     FC1:::nn
+     FC2:::nn
+     DiffCheck:::rl
+     RandomMove:::rl
+     QValues:::rl
+     Masking:::rl
+     ArgMax:::rl
+     SelectedAction:::rl
+     Memory:::rl
+     TargetNet:::rl
+     Loss:::rl
+     Backprop:::rl
+    classDef input fill:#2B6CB0,stroke:#2C5282,color:#FFF
+    classDef preproc fill:#319795,stroke:#234E52,color:#FFF
+    classDef nn fill:#805AD5,stroke:#6B46C1,color:#FFF
+    classDef rl fill:#D69E2E,stroke:#B7791F,color:#FFF

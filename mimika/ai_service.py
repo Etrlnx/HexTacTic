@@ -21,17 +21,21 @@ class GridScaleAI:
         self.model.eval()
 
     def preproc_state(self, current_moves, player_char):
+        """Encode the 6x6 list board used by TicTacToeGame for model inference."""
         state = np.zeros((3, cfg.BOARD_SIZE, cfg.BOARD_SIZE), dtype=np.float32)
         state[0, :, :] = 1.0 # Initialize all as empty
 
         opp_char = 'O' if player_char == 'X' else 'X'
 
-        for (r, c), p in current_moves.items():
-            state[0, r, c] = 0.0 # Remove empty flag
-            if p == player_char:
-                state[1, r, c] = 1.0 # Self channel
-            elif p == opp_char:
-                state[2, r, c] = 1.0 # Opponent channel
+        for r, row in enumerate(current_moves):
+            for c, p in enumerate(row):
+                if p == "":
+                    continue
+                state[0, r, c] = 0.0 # Remove empty flag
+                if p == player_char:
+                    state[1, r, c] = 1.0 # Self channel
+                elif p == opp_char:
+                    state[2, r, c] = 1.0 # Opponent channel
 
         return torch.tensor(state, dtype=torch.float32).unsqueeze(0).to(self.device)
 

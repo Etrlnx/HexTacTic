@@ -37,6 +37,7 @@ class DQNAgent:
             
     
     def optimality(self):
+        """Run one Double-DQN replay update when a full batch is available."""
         if len(self.memory) < cfg.BATCH_SIZE:
             return
         # Sample batch of transition
@@ -46,10 +47,23 @@ class DQNAgent:
         stateb = torch.cat(state).to(self.device)
         actionb = torch.tensor(action, dtype=torch.long).unsqueeze(1).to(self.device)
         rewb = torch.tensor(reward, dtype = torch.float32).unsqueeze(1).to(self.device)
+        nextstateb = torch.cat(nextst).to(self.device)
+        doneb = torch.tensor(done, dtype=torch.float32).unsqueeze(1).to(self.device)
+
+        current_q = self.policynet(stateb).gather(1, actionb)
+        with torch.no_grad():
+            # The policy network selects the next action; the target network evaluates it.
+            next_actions = self.policynet(nextstateb).argmax(dim=1, keepdim=True)
+            next_q = self.targnet(nextstateb).gather(1, next_actions)
+            target_q = rewb + cfg.GAMMA * next_q * (1 - doneb)
+
+        loss = self.loss_fn(current_q, target_q)
+        self.optimizer.zero_grad()
+        loss.backward()
+        torch.nn.utils.clip_grad_norm_(self.policynet.parameters(), max_norm=1.0)
+        self.optimizer.step()
+        return loss.item()
         
     def update_target_network(self):
         """Copies weights from the Policy Network to the Target Network."""
         self.targnet.load_state_dict(self.policynet.state_dict())
-        
-        
-            

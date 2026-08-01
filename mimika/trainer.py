@@ -34,8 +34,8 @@ def train(episodes=10000):
     for ep in range(episodes):
         game = TicTacToeGame()
         hist = {
-            "X": {"state": None, "action": None, "score": 0},
-            "O": {"state": None, "action": None, "score": 0}
+            "X": {"state": None, "action": None, "score": 0, "reward": 0.0},
+            "O": {"state": None, "action": None, "score": 0, "reward": 0.0}
         }
 
         # Game loop
@@ -58,7 +58,7 @@ def train(episodes=10000):
             
             # Record opponent transition once active player responds
             if hist[opp_p]['state'] is not None:
-                agent.memory.append((hist[opp_p]['state'], hist[opp_p]['action'], -0.1, statetensor, False))
+                agent.memory.append((hist[opp_p]['state'], hist[opp_p]['action'], hist[opp_p]['reward'], statetensor, False))
             
             prevscore = game.scores[curr_p]
             game.process_move(row, col)
@@ -71,6 +71,7 @@ def train(episodes=10000):
             hist[curr_p]['state'] = statetensor
             hist[curr_p]['action'] = actionidx
             hist[curr_p]['score'] = newscore
+            hist[curr_p]['reward'] = stepreward
             
             # In-step training pass
             agent.optimality()

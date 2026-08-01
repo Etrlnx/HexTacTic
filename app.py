@@ -119,9 +119,8 @@ def get_player_profile(username: str):
 
 @app.post("/api/record-match")
 def record_match(payload: RecordMatchRequest):
-    valid_results = ["win", "loss", "draw", "wins", "losses", "draws"]
-    if payload.result.lower() not in valid_results:
-        raise HTTPException(status_code=400, detail="Invalid result token string")
-        
-    update_player_record(payload.username, payload.difficulty, payload.result)
+    try:
+        update_player_record(payload.username, payload.difficulty, payload.result)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     return get_player_stats(payload.username)

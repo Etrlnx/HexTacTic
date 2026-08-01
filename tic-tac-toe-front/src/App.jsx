@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState } from 'react';
 import './App.css';
 
 const API_BASE_URL = 'http://localhost:8000/api';
@@ -56,8 +56,6 @@ function App() {
       chosenMarker = goFirst ? "X" : "O";
     }
 
-    await fetchPlayerProfile(cleanName);
-
     try {
       const response = await fetch(`${API_BASE_URL}/start`, {
         method: 'POST',
@@ -71,6 +69,8 @@ function App() {
       setPlayerMarker(chosenMarker);
       setGameMode(mode);
       setGameStarted(true);
+      // Profile data is supplementary; a slow database must not delay the match.
+      void fetchPlayerProfile(cleanName);
     } catch (err) {
       console.error("Initialization pipeline broken:", err);
     }
@@ -116,16 +116,15 @@ function App() {
     let result = "draws";
     
     if (finalData.has_winner) {
-      // Corrected Flag Mapping: Because backend swaps player markers on turn end, 
-      // if finalData.current_player matches your token, it means the *other* entity (AI) won!
-      const humanWon = finalData.current_player !== playerMarker; 
+      // The backend retains the player who made the winning move as current_player.
+      const humanWon = finalData.current_player === playerMarker;
       
       if (gameMode === "vs_system") {
         result = humanWon ? "wins" : "losses";
         alert(humanWon ? "You beat the AI!" : "The AI outsmarted you. Game Over!");
       } else {
         // PvP Win Messages
-        const winningToken = finalData.current_player === "O" ? "X" : "O";
+        const winningToken = finalData.current_player;
         alert(`Match completed! Player ${winningToken} wins!`);
         return; 
       }
@@ -229,8 +228,8 @@ function App() {
             <h3>Player Profile: <strong>{playerName}</strong></h3>
             <div className="difficulty-badge-container">
               <span className="difficulty-label">Highest Difficulty Reached:</span>
-              <span className={`difficulty-badge ${playerStats.highest_difficulty.toLowerCase()}`}>
-                {playerStats.highest_difficulty}
+              <span className={`difficulty-badge ${(playerStats.highest_difficulty || 'Easy').toLowerCase()}`}>
+                {playerStats.highest_difficulty || 'Easy'}
               </span>
             </div>
           </div>

@@ -1,0 +1,17 @@
+# Environment & Secrets
+.env
+database.py
+
+# Python Virtual Environment
+.venv/
+__pycache__/
+*.pyc
+
+# Node / React Dependencies & Builds
+node_modules/
+dist/
+build/
+
+# IDE / OS Settings
+.vscode/
+.DS_Store

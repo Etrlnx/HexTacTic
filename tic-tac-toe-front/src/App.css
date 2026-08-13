@@ -60,42 +60,6 @@ button:hover {
   transform: translateY(-1px);
 }
 
-/* Scoreboard Matrix Node Styles */
-.scoreboard-panel {
-  display: flex;
-  justify-content: space-between;
-  gap: 1rem;
-  margin-bottom: 1rem;
-}
-
-.score-node {
-  flex: 1;
-  background-color: var(--panel-color);
-  padding: 0.75rem;
-  border-radius: 8px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  border-bottom: 4px solid transparent;
-}
-
-.score-node.X { border-bottom-color: var(--x-color); }
-.score-node.O { border-bottom-color: var(--o-color); }
-
-.score-node .label {
-  font-size: 0.9rem;
-  color: #94a3b8;
-  font-weight: 500;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
-
-.score-node .count {
-  font-size: 1.6rem;
-  font-weight: bold;
-  margin-top: 0.25rem;
-}
-
 /* Status Headers Context Box */
 .status-bar {
   background-color: #1e293b;
@@ -111,6 +75,7 @@ button:hover {
 .status-text .X { color: var(--x-color); }
 .status-text .O { color: var(--o-color); }
 .win { color: #f59e0b; font-weight: bold; }
+.tie { color: #94a3b8; font-weight: bold; }
 
 /* Grid Canvas Layout Mapping */
 .grid-container {

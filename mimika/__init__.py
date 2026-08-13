@@ -1,14 +1,14 @@
-# bot/__init__.py
-
 from .config import DQNconf
 from .model import TTDQNN
 from .agent import DQNAgent
-from .trainer import train, preproc_s
+from .trainer import train
+from .board_encoding import encode_board, valid_move_indices
 
 __all__ = [
     "DQNconf",
     "TTDQNN",
     "DQNAgent",
     "train",
-    "preproc_s"
+    "encode_board",
+    "valid_move_indices",
 ]

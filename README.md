@@ -382,3 +382,9 @@ The architecture diagrams describe the intended subsystem boundaries, while the 
 In particular, the current source uses PostgreSQL rather than the SQLite database described by an older repository README, and the live AI implementation is contained in `mimika/`.
 
 The frontend and backend should also be kept synchronized when API request contracts evolve, especially around session identifiers and production API-key enforcement.
+
+## License
+
+HexTacTic is licensed under the MIT License.
+
+See the [LICENSE](./LICENSE) file for details.

@@ -22,8 +22,7 @@ def _load_local_env() -> None:
 _load_local_env()
 
 ROOT_DIR = Path(__file__).resolve().parent
-DEFAULT_MODEL_PATH = ROOT_DIR / "mimika" / "dqn_model_weights.pth"
-FALLBACK_MODEL_PATH = ROOT_DIR / "saved_models" / "dqn_model_weights.pth"
+DEFAULT_MODEL_PATH = ROOT_DIR / "saved_models" / "best_model.pt"
 
 RUNTIME_MODE = os.getenv("RUNTIME_MODE", "development").lower()
 API_HOST = os.getenv("API_HOST", "127.0.0.1")
@@ -39,8 +38,6 @@ DB_POOL_MIN = int(os.getenv("DB_POOL_MIN", "1"))
 DB_POOL_MAX = int(os.getenv("DB_POOL_MAX", "10"))
 
 MODEL_PATH = Path(os.getenv("MODEL_PATH", str(DEFAULT_MODEL_PATH)))
-if not MODEL_PATH.is_file() and FALLBACK_MODEL_PATH.is_file():
-    MODEL_PATH = FALLBACK_MODEL_PATH
 
 CORS_ORIGINS = [
     origin.strip()

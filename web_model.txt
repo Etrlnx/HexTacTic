@@ -25,7 +25,7 @@ graph TD
     end
 
     subgraph ModelStorage ["Model Storage Layer"]
-        ModelWeights[("Saved Weights (dqn_model_weights.pth)")]:::ai
+        ModelWeights[("Saved Weights (saved_models/best_model.pt)")]:::ai
     end
 
     %% Flow Connections

@@ -5,6 +5,14 @@
   --x-color: #3b82f6;
   --o-color: #10b981;
   --accent-glow: #f43f5e;
+  --win-color: #f59e0b;
+  --muted-color: #64748b;
+  --focus-ring: #3b82f6;
+  --history-bg: #0f172a;
+}
+
+* {
+  box-sizing: border-box;
 }
 
 body {
@@ -12,34 +20,82 @@ body {
   background-color: var(--bg-color);
   color: var(--text-color);
   font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  min-height: 100vh;
 }
 
 .app-container {
-  max-width: 500px;
-  margin: 2rem auto;
+  width: 100%;
+  max-width: 900px;
+  margin: 0 auto;
   padding: 1rem;
   text-align: center;
 }
 
 h1 {
-  font-size: 2.2rem;
+  font-size: clamp(1.8rem, 4vw, 2.5rem);
   margin-bottom: 1.5rem;
-  color:#ffffff;
-  font-family: "algerian"
+  color: #ffffff;
+  font-family: "algerian", serif;
+}
+
+h2 {
+  font-size: clamp(1.3rem, 3vw, 1.6rem);
+  margin-bottom: 1rem;
+}
+
+h3 {
+  font-size: 1.1rem;
+  margin: 0 0 0.75rem 0;
+  color: var(--muted-color);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
 }
 
 /* Landing Setup Mode Styles */
 .setup-screen {
   background-color: var(--panel-color);
-  padding: 2rem;
+  padding: clamp(1.5rem, 3vw, 2rem);
   border-radius: 12px;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+}
+
+.difficulty-selector {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.difficulty-selector label {
+  font-weight: 600;
+  color: var(--muted-color);
+  font-size: 0.9rem;
+}
+
+.difficulty-selector select {
+  padding: 0.6rem 1rem;
+  font-size: 1rem;
+  font-weight: 600;
+  border: 2px solid #334155;
+  border-radius: 8px;
+  background-color: #020617;
+  color: var(--text-color);
+  cursor: pointer;
+  transition: border-color 0.2s ease;
+  min-width: 200px;
+}
+
+.difficulty-selector select:focus {
+  outline: none;
+  border-color: var(--focus-ring);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.3);
 }
 
 .mode-buttons {
   display: flex;
   flex-direction: column;
-  gap: 1rem;
+  gap: 0.75rem;
   margin-top: 1.5rem;
 }
 
@@ -55,67 +111,160 @@ button {
   color: white;
 }
 
-button:hover {
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none !important;
+}
+
+button:hover:not(:disabled) {
   filter: brightness(1.2);
   transform: translateY(-1px);
+}
+
+button:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.5);
 }
 
 /* Status Headers Context Box */
 .status-bar {
   background-color: #1e293b;
-  padding: 0.6rem;
-  border-radius: 6px;
+  padding: 0.75rem 1rem;
+  border-radius: 8px;
   margin-bottom: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  align-items: center;
 }
+
+.score-display {
+  font-size: 1rem;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.score-display .X { color: var(--x-color); font-weight: 700; }
+.score-display .O { color: var(--o-color); font-weight: 700; }
 
 .status-text {
   font-size: 1.1rem;
+  font-weight: 500;
 }
 
 .status-text .X { color: var(--x-color); }
 .status-text .O { color: var(--o-color); }
-.win { color: #f59e0b; font-weight: bold; }
-.tie { color: #94a3b8; font-weight: bold; }
+.status-text.win { color: var(--win-color); font-weight: bold; }
+.status-text.tie { color: var(--muted-color); font-weight: bold; }
+
+/* WebSocket Connection Indicator */
+.connection-indicator {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.connection-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  transition: background-color 0.3s ease;
+}
+
+.connection-text {
+  font-size: 0.85rem;
+  color: var(--muted-color);
+}
+
+.session-id-btn {
+  background-color: #334155;
+  font-size: 0.75rem;
+  padding: 0.4rem 0.8rem;
+  margin-left: 0.5rem;
+}
+
+.session-id-btn:hover {
+  background-color: #475569;
+}
+
+/* Game Main Layout */
+.game-main {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  align-items: center;
+}
+
+@media (min-width: 768px) {
+  .game-main {
+    flex-direction: row;
+    align-items: flex-start;
+  }
+}
 
 /* Grid Canvas Layout Mapping */
 .grid-container {
   display: flex;
   flex-direction: column;
-  gap: 5px;
+  gap: 4px;
   background-color: #020617;
   padding: 8px;
   border-radius: 10px;
-  margin-bottom: 1rem;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+  width: 100%;
+  max-width: 420px;
+  aspect-ratio: 1;
 }
 
 .grid-row {
   display: flex;
-  gap: 5px;
+  gap: 4px;
   justify-content: center;
+  flex: 1;
 }
 
 .grid-cell {
-  width: 65px;
-  height: 65px;
+  flex: 1;
+  min-width: 0;
+  aspect-ratio: 1;
   background-color: var(--panel-color);
-  font-size: 1.8rem;
-  font-weight: bold;
+  font-size: clamp(1.2rem, 3vw, 2rem);
+  font-weight: 700;
   display: flex;
   align-items: center;
   justify-content: center;
   border-radius: 6px;
   transition: all 0.1s ease;
+  border: 2px solid transparent;
 }
 
-.grid-cell:hover {
+.grid-cell:hover:not(:disabled) {
   background-color: #334155;
+}
+
+.grid-cell:focus-visible {
+  outline: none;
+  border-color: var(--focus-ring);
+  box-shadow: 0 0 0 2px var(--focus-ring), 0 0 8px rgba(59, 130, 246, 0.4);
+  z-index: 1;
+}
+
+.grid-cell.focused {
+  border-color: var(--focus-ring);
+  box-shadow: inset 0 0 0 2px var(--focus-ring);
 }
 
 /* Structural Color Markers */
 .grid-cell.X { color: var(--x-color); }
 .grid-cell.O { color: var(--o-color); }
 
-/* Double Highlight Configuration for Points */
+/* Winner Highlight Animation */
 .grid-cell.winner-highlight {
   background-color: var(--accent-glow) !important;
   color: white !important;
@@ -127,20 +276,171 @@ button:hover {
   to { box-shadow: 0 0 12px var(--accent-glow); }
 }
 
+/* Side Panel */
+.side-panel {
+  width: 100%;
+  max-width: 420px;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
 
+@media (min-width: 768px) {
+  .side-panel {
+    flex-shrink: 0;
+  }
+}
+
+.controls {
+  background-color: var(--panel-color);
+  padding: 1rem;
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.history-toggle {
+  background-color: #334155;
+  font-size: 0.9rem;
+  padding: 0.6rem 1rem;
+}
+
+.keyboard-hint {
+  font-size: 0.75rem;
+  color: var(--muted-color);
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 1rem;
+}
+
+.keyboard-hint kbd {
+  background-color: #020617;
+  padding: 0.15rem 0.4rem;
+  border-radius: 4px;
+  border: 1px solid #334155;
+  font-family: monospace;
+  font-size: 0.7rem;
+}
+
+/* Move History */
+.move-history {
+  background-color: var(--history-bg);
+  padding: 1rem;
+  border-radius: 8px;
+  border: 1px solid #334155;
+  max-height: 300px;
+  overflow-y: auto;
+  text-align: left;
+}
+
+.move-history ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.move-history li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.4rem 0.6rem;
+  background-color: #1e293b;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  animation: slideIn 0.2s ease;
+}
+
+@keyframes slideIn {
+  from { opacity: 0; transform: translateX(-10px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+.move-history li.ai-move {
+  border-left: 3px solid var(--accent-glow);
+}
+
+.move-player {
+  font-weight: 700;
+}
+
+.move-player.X { color: var(--x-color); }
+.move-player.O { color: var(--o-color); }
+
+.move-coords {
+  color: var(--muted-color);
+  font-family: monospace;
+}
+
+.ai-badge {
+  font-size: 0.65rem;
+  background-color: var(--accent-glow);
+  color: white;
+  padding: 0.1rem 0.4rem;
+  border-radius: 4px;
+  text-transform: uppercase;
+  font-weight: 700;
+}
+
+/* Game Result Banner */
+.game-result {
+  padding: 1rem;
+  border-radius: 8px;
+  font-size: 1.2rem;
+  font-weight: 700;
+  text-align: center;
+  animation: popIn 0.4s ease;
+}
+
+@keyframes popIn {
+  from { opacity: 0; transform: scale(0.9); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+.game-result.win {
+  background-color: rgba(16, 185, 129, 0.2);
+  color: var(--o-color);
+  border: 2px solid var(--o-color);
+}
+
+.game-result.lose {
+  background-color: rgba(244, 63, 94, 0.2);
+  color: var(--accent-glow);
+  border: 2px solid var(--accent-glow);
+}
+
+.game-result.draw {
+  background-color: rgba(148, 163, 184, 0.2);
+  color: var(--muted-color);
+  border: 2px solid var(--muted-color);
+}
+
+/* Action Buttons */
+.action-buttons-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  justify-content: center;
+  margin-top: 1rem;
+}
 
 .back-btn {
-  background-color: #555;
+  background-color: #475569;
   color: white;
   border: none;
 }
 
 .play-again-btn {
-  background-color: #28a745; 
+  background-color: #10b981;
   color: white;
   border: none;
 }
 
+/* Divider */
 .divider {
   margin: 2rem 0;
   border: 0;
@@ -156,6 +456,10 @@ button:hover {
   box-shadow: 0 4px 16px rgba(0,0,0,0.2);
 }
 
+.stats-container {
+  text-align: center;
+}
+
 .difficulty-badge-container {
   margin-top: 1.5rem;
   padding: 1rem;
@@ -168,31 +472,68 @@ button:hover {
 }
 
 .difficulty-label {
-  color: #94a3b8;
-  font-size: 0.9rem;
+  color: var(--muted-color);
+  font-size: 0.85rem;
   text-transform: uppercase;
   letter-spacing: 1px;
 }
 
 .difficulty-badge {
   font-size: 1.5rem;
-  font-weight: bold;
+  font-weight: 700;
   padding: 0.5rem 1.5rem;
   border-radius: 6px;
   text-transform: uppercase;
 }
 
-/* Color coding for the difficulties */
 .difficulty-badge.easy { color: #10b981; }
 .difficulty-badge.normal { color: #3b82f6; }
 .difficulty-badge.hard { color: #f59e0b; }
-.difficulty-badge.nightmare { 
-  color: var(--accent-glow); 
+.difficulty-badge.nightmare {
+  color: var(--accent-glow);
   text-shadow: 0 0 10px rgba(244, 63, 94, 0.5);
 }
 
-
 .no-scores {
-  color: #475569;
+  color: var(--muted-color);
   font-style: italic;
+}
+
+/* Reduced Motion */
+@media (prefers-reduced-motion: reduce) {
+  .grid-cell.winner-highlight {
+    animation: none;
+  }
+  .game-result {
+    animation: none;
+  }
+  .move-history li {
+    animation: none;
+  }
+  button {
+    transition: none;
+  }
+  .grid-cell {
+    transition: none;
+  }
+}
+
+/* High Contrast Mode */
+@media (prefers-contrast: high) {
+  :root {
+    --x-color: #60a5fa;
+    --o-color: #34d399;
+    --accent-glow: #f87171;
+    --focus-ring: #60a5fa;
+  }
+  .grid-cell {
+    border: 2px solid #334155;
+  }
+}
+
+/* Print Styles */
+@media print {
+  .setup-screen, .action-buttons-row, .controls, .keyboard-hint {
+    display: none !important;
+  }
 }

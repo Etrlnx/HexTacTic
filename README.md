@@ -18,7 +18,7 @@ flowchart LR
     Sessions --> Rules["TicTacToeGame / Rules Engine"]
     API --> AI["Mimika / GridScaleAI"]
     API --> DB["PostgreSQL"]
-    AI --> Weights["dqn_model_weights.pth"]
+    AI --> Weights["saved_models/best_model.pt"]
 ```
 
 The repository places the frontend in `tic-tac-toe-front/`, while the FastAPI application remains at the project root. The frontend's Vite configuration uses `concurrently` to launch the frontend and backend development processes together.
@@ -60,7 +60,7 @@ The API does not contain the neural network implementation. It delegates AI deci
 | Database layer | `database.py` | PostgreSQL pooling, migrations and player statistics |
 | Configuration | `settings.py` | Environment-driven runtime configuration |
 | Migrations | `migrations/` | PostgreSQL schema evolution |
-| Model artifact | `mimika/dqn_model_weights.pth` | Trained Mimika parameters |
+| Model artifact | `saved_models/best_model.pt` | Best benchmarked Mimika parameters (the only tracked weights file) |
 
 ---
 
@@ -253,16 +253,10 @@ The application can load values from a local `.env` file.
 The model path defaults to:
 
 ```text
-mimika/dqn_model_weights.pth
+saved_models/best_model.pt
 ```
 
-and falls back to:
-
-```text
-saved_models/dqn_model_weights.pth
-```
-
-if the default artifact is unavailable.
+Set `MODEL_PATH` to serve a different weights file. Training output (`saved_models/dqn_model_weights.pth`, registry checkpoints) is gitignored; promote a new model by benchmarking it against `best_model.pt` and copying the winner over it.
 
 ---
 
@@ -336,8 +330,11 @@ python_tictactoe/
 │   ├── config.py
 │   ├── model.py
 │   ├── trainer.py
-│   └── dqn_model_weights.pth
+│   ├── trainer_enhanced.py
+│   ├── model_registry.py
+│   └── evaluate.py
 ├── saved_models/
+│   └── best_model.pt
 ├── tic-tac-toe-front/
 │   ├── src/
 │   │   ├── App.jsx

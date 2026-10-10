@@ -1,0 +1,24 @@
+# Local PostgreSQL for development while the home server is unavailable.
+# Start:  docker compose -f local-db/docker-compose.yml up -d
+# Tables are created by the API on startup (database.init_db runs migrations/).
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: hextactic-postgres
+    environment:
+      POSTGRES_DB: hextactic
+      POSTGRES_USER: hextactic
+      POSTGRES_PASSWORD: ***REMOVED***
+    ports:
+      - "127.0.0.1:5433:5432"  # 5432 on this machine is used by another project
+    volumes:
+      - hextactic-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U hextactic -d hextactic"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+volumes:
+  hextactic-pgdata:

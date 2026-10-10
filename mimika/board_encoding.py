@@ -33,6 +33,12 @@ def encode_board_numpy(board_state: list[list[str]], current_player: str) -> np.
     return tensor.squeeze(0).numpy()
 
 
+def masked_argmax(q_values: np.ndarray, valid_moves: list[int]) -> int:
+    """Index of the highest Q-value among valid moves (occupied cells are never picked)."""
+    moves = np.asarray(valid_moves)
+    return int(moves[np.argmax(q_values[moves])])
+
+
 def valid_move_indices(board_state: list[list[str]]) -> list[int]:
     """Return flattened indices for every empty cell on the board."""
     moves: list[int] = []

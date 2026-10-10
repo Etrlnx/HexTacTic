@@ -1,6 +1,5 @@
-import os
+import argparse
 
-import numpy as np
 import torch
 
 from script import TicTacToeGame
@@ -8,61 +7,94 @@ from script import TicTacToeGame
 from .agent import DQNAgent
 from .board_encoding import encode_board, valid_move_indices
 from .config import DQNconf as cfg
+from .model_registry import DEFAULT_REGISTRY_DIR
+
+WEIGHTS_PATH = DEFAULT_REGISTRY_DIR / "dqn_model_weights.pth"
+
+STEP_PENALTY = -0.1
+POINT_REWARD = 10.0
+WIN_REWARD = 30.0
+
+
+def play_episode(agent, total_steps=0):
+    """Play one self-play game, storing one transition per move from the mover's perspective.
+
+    A player's transition is closed only when that player is about to move again, so
+    next_state is the position the same player actually faces after the opponent's reply.
+    Points the opponent scores in that reply are subtracted from the transition's reward,
+    and the final move of each player gets the +/- WIN_REWARD terminal outcome.
+
+    Returns (episode_reward, length, losses, total_steps).
+    """
+    game = TicTacToeGame()
+    pending = {}  # player -> [state, action, reward] awaiting its next_state
+    episode_reward = 0.0
+    length = 0
+    losses = []
+
+    def learn():
+        loss = agent.optimality()
+        if loss is not None:
+            losses.append(loss)
+
+    while not game._has_winner and not game.is_tied():
+        player = game.current_player
+        opponent = "O" if player == "X" else "X"
+        state = encode_board(game._current_moves, player)
+
+        if player in pending:
+            prev_state, prev_action, prev_reward = pending.pop(player)
+            agent.memory.append((prev_state, prev_action, prev_reward, state, False))
+
+        action = agent.action_s(state, valid_move_indices(game._current_moves))
+        before = game.scores[player]
+        game.process_move(action // cfg.BOARD_SIZE, action % cfg.BOARD_SIZE)
+        gained = game.scores[player] - before
+
+        reward = STEP_PENALTY + POINT_REWARD * gained
+        episode_reward += reward
+        pending[player] = [state, action, reward]
+        if opponent in pending:
+            pending[opponent][2] -= POINT_REWARD * gained
+
+        learn()
+        length += 1
+        total_steps += 1
+        if total_steps % cfg.TARGET_UPD_FREQ == 0:
+            agent.update_target_network()
+
+    # next_state of a terminal transition is ignored by the target (done=True).
+    terminal_state = encode_board(game._current_moves, "X")
+    for player, (state, action, reward) in pending.items():
+        if game._has_winner:
+            reward += WIN_REWARD if game.current_player == player else -WIN_REWARD
+        agent.memory.append((state, action, reward, terminal_state, True))
+
+    for _ in range(10):
+        learn()
+
+    return episode_reward, length, losses, total_steps
 
 
 def train(episodes=10000):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     agent = DQNAgent(device)
     total_steps = 0
+    WEIGHTS_PATH.parent.mkdir(parents=True, exist_ok=True)
 
     for episode in range(episodes):
-        game = TicTacToeGame()
-
-        while not game._has_winner and not game.is_tied():
-            current_player = game.current_player
-            moves = valid_move_indices(game._current_moves)
-            if not moves:
-                break
-
-            state_tensor = encode_board(game._current_moves, current_player)
-            action_idx = agent.action_s(state_tensor, moves)
-            row, col = action_idx // cfg.BOARD_SIZE, action_idx % cfg.BOARD_SIZE
-
-            previous_score = game.scores[current_player]
-            game.process_move(row, col)
-            points_gained = game.scores[current_player] - previous_score
-            step_reward = -0.1 + (points_gained * 10.0)
-
-            done = game._has_winner or game.is_tied()
-            next_state_tensor = encode_board(game._current_moves, current_player)
-            agent.memory.append((state_tensor, action_idx, step_reward, next_state_tensor, done))
-            agent.optimality()
-            total_steps += 1
-
-            if total_steps % cfg.TARGET_UPD_FREQ == 0:
-                agent.update_target_network()
-
-        terminal_state = encode_board(game._current_moves, "X")
-        for player in ("X", "O"):
-            if game._has_winner:
-                terminal_reward = 30.0 if game.scores[player] >= 3 else -30.0
-            else:
-                terminal_reward = 0.0
-
-            if agent.memory:
-                last_state, last_action, _, _, _ = agent.memory[-1]
-                agent.memory.append((last_state, last_action, terminal_reward, terminal_state, True))
-
-        for _ in range(10):
-            agent.optimality()
-
+        _, _, _, total_steps = play_episode(agent, total_steps)
         agent.epsilon = max(cfg.EPS_MIN, agent.epsilon * cfg.EPS_DECAY)
 
         if (episode + 1) % 500 == 0:
             print(f"Episode {episode + 1}/{episodes} | Epsilon: {agent.epsilon:.4f}")
-            os.makedirs("saved_models", exist_ok=True)
-            torch.save(agent.policynet.state_dict(), "saved_models/dqn_model_weights.pth")
+            torch.save(agent.policynet.state_dict(), WEIGHTS_PATH)
 
-    os.makedirs("saved_models", exist_ok=True)
-    torch.save(agent.policynet.state_dict(), "saved_models/dqn_model_weights.pth")
-    print("Training complete! Model weights saved to saved_models/dqn_model_weights.pth")
+    torch.save(agent.policynet.state_dict(), WEIGHTS_PATH)
+    print(f"Training complete! Model weights saved to {WEIGHTS_PATH}")
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Train Mimika with plain DDQN self-play")
+    parser.add_argument("--episodes", type=int, default=10000)
+    train(parser.parse_args().episodes)

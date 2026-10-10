@@ -212,7 +212,7 @@ The service:
 
 1. Determines CPU/GPU availability.
 2. Instantiates `TTDQNN`.
-3. Loads `dqn_model_weights.pth`.
+3. Loads `saved_models/best_model.pt` (or `MODEL_PATH`).
 4. Switches the model to evaluation mode.
 5. Encodes incoming board states.
 6. Performs the forward pass.
@@ -411,13 +411,9 @@ Decay epsilon
 Periodically save weights
 ```
 
-Weights are saved under:
+Training writes its latest weights to `saved_models/dqn_model_weights.pth` (gitignored).
 
-```text
-saved_models/dqn_model_weights.pth
-```
-
-The deployed application can use the corresponding model artifact through the configured `MODEL_PATH`.
+The deployed application serves `saved_models/best_model.pt`, the benchmarked best model. To promote a newly trained model, benchmark it against `best_model.pt` and copy the winner over it.
 
 ---
 
@@ -471,7 +467,12 @@ mimika/
 ├── config.py
 ├── model.py
 ├── trainer.py
-└── dqn_model_weights.pth
+├── trainer_enhanced.py
+├── model_registry.py
+└── evaluate.py
+
+saved_models/
+└── best_model.pt
 ```
 
 ### Responsibilities
@@ -484,7 +485,10 @@ mimika/
 | `agent.py` | DDQN agent and replay update |
 | `trainer.py` | Offline training loop |
 | `ai_service.py` | Production inference wrapper |
-| `dqn_model_weights.pth` | Trained model parameters |
+| `trainer_enhanced.py` | Training with evaluation, checkpoints and TensorBoard |
+| `model_registry.py` | Versioned checkpoints and model-vs-model evaluation |
+| `evaluate.py` | Evaluation CLI |
+| `saved_models/best_model.pt` | Production model parameters |
 
 ---
 

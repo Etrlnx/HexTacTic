@@ -1,11 +1,11 @@
 import random
-import numpy as np
 import torch
 import torch.nn.functional as F
 import torch.optim as optim
 from collections import deque
 
 from .model import TTDQNN
+from .board_encoding import masked_argmax
 from .config import DQNconf as cfg
 
 
@@ -26,10 +26,7 @@ class DQNAgent:
 
         with torch.no_grad():
             q_values = self.policynet(state_tensor.to(self.device)).cpu().numpy()[0]
-            q_mask = np.full(cfg.BOARD_SIZE * cfg.BOARD_SIZE, -np.inf)
-            for action in valid_actions:
-                q_mask[action] = q_values[action]
-            return int(np.argmax(q_mask))
+            return masked_argmax(q_values, valid_actions)
 
     def optimality(self):
         """Run one Double-DQN replay update when a full batch is available."""

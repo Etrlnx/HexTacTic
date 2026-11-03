@@ -171,16 +171,21 @@ The client is a React 19 application bundled with Vite.
 
 The frontend is responsible for:
 
-- Game configuration.
-- Username collection.
-- Board rendering.
-- Current-player display.
-- Score and winner highlighting.
-- Difficulty selection.
-- Player-vs-player (local and real-time WebSocket) and player-vs-system modes.
-- Move history, sound effects, keyboard board navigation and ARIA labels.
-- Fetching player statistics.
+- Game setup on one screen: name, opponent (Mimika, friend on this device, friend online), Mimika's level, who moves first, and a game code for joining an online game.
+- Board rendering with A–F / 1–6 coordinates, scored-line highlighting and a last-move marker.
+- Status line, per-player score pips (first to 3) and a share code for online games.
+- The player's win/loss/draw record against Mimika, per difficulty.
+- Move history, sound effects, keyboard board navigation (arrow keys, Enter, Ctrl+H) and ARIA labels.
 - Synchronizing backend game state with React state.
+
+Errors and notices are shown inline; the UI uses no `prompt()`, `confirm()` or `alert()`.
+
+### Design
+
+- Black, white and grey only. Dark mode (`prefers-color-scheme`) inverts the palette. Colour tokens live in `src/index.css`.
+- One typeface, Archivo (Google Fonts, loaded in `index.html`). The wordmark uses its widest cut.
+- On each screen, blocks fade in from above, top to bottom, the first time they appear (GSAP, in `App.jsx`). Skipped when `prefers-reduced-motion` is set.
+- Layouts stack to one column below 860px.
 
 The frontend package defines development commands for launching Vite and the FastAPI backend concurrently.
 
@@ -189,6 +194,7 @@ The frontend package defines development commands for launching Vite and the Fas
 - React
 - React DOM
 - Vite
+- GSAP (entrance animation)
 - ESLint
 - `concurrently`
 
@@ -395,7 +401,8 @@ The repository's frontend package launches:
 ├── tic-tac-toe-front/
 │   ├── src/
 │   │   ├── App.jsx
-│   │   └── App.css
+│   │   ├── App.css
+│   │   └── index.css
 │   ├── package.json
 │   └── ...
 └── package.json
@@ -435,7 +442,7 @@ The architecture diagrams describe the intended subsystem boundaries, while the 
 
 The live AI implementation is contained in `mimika/`, and persistence uses PostgreSQL.
 
-Known gaps: the frontend does not send `X-API-Key`, so production mode with `API_KEY` set rejects its requests; a second player cannot yet join a WebSocket game from the UI; WebSocket games skip API-key auth and are not recorded.
+Known gaps: the frontend does not send `X-API-Key`, so production mode with `API_KEY` set rejects its requests; WebSocket games skip API-key auth and are not recorded.
 
 ## License
 

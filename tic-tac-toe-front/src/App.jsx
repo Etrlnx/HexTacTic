@@ -1,4 +1,5 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react';
+import { gsap } from 'gsap';
 import './App.css';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000/api/v1';
@@ -11,12 +12,55 @@ const SOUNDS = {
   draw: 'data:audio/wav;base64,UklGRigAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQQAAAA=',
 };
 
+const COLUMNS = 'ABCDEF';
+const DIFFICULTIES = ['Easy', 'Normal', 'Hard', 'Nightmare'];
+const MODES = [
+  { value: 'vs_system', label: 'Mimika', hint: 'The AI opponent' },
+  { value: 'vs_player', label: 'Friend, this device', hint: 'Take turns on one screen' },
+  { value: 'vs_player_ws', label: 'Friend, online', hint: 'Share a code to play' },
+];
+
+const cellName = (row, col) => `${COLUMNS[col]}${row + 1}`;
+
 function playSound(name) {
   try {
     const audio = new Audio(SOUNDS[name]);
     audio.volume = 0.3;
     audio.play().catch(() => {});
   } catch { /* audio not supported */ }
+}
+
+function Mark({ value }) {
+  if (value === 'X') {
+    return (
+      <svg className="mark" viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M6 6 18 18M18 6 6 18" pathLength="1" />
+      </svg>
+    );
+  }
+  if (value === 'O') {
+    return (
+      <svg className="mark" viewBox="0 0 24 24" aria-hidden="true">
+        <circle cx="12" cy="12" r="6.5" pathLength="1" />
+      </svg>
+    );
+  }
+  return null;
+}
+
+function ScoreRow({ marker, name, detail, points, active }) {
+  return (
+    <div className={`score-row reveal${active ? ' is-active' : ''}`}>
+      <span className="score-mark"><Mark value={marker} /></span>
+      <span className="score-name">
+        {name}
+        {detail && <span className="score-detail">{detail}</span>}
+      </span>
+      <span className="pips" aria-label={`${points} of 3 points`}>
+        {[0, 1, 2].map(i => <span key={i} className={`pip${i < points ? ' is-filled' : ''}`} />)}
+      </span>
+    </div>
+  );
 }
 
 function App() {
@@ -27,22 +71,27 @@ function App() {
   const [isTied, setIsTied] = useState(false);
   const [scores, setScores] = useState({ X: 0, O: 0 });
 
-  const [gameMode, setGameMode] = useState("vs_player");
+  const [gameMode, setGameMode] = useState("vs_system");
   const [difficulty, setDifficulty] = useState("Normal");
   const [gameStarted, setGameStarted] = useState(false);
   const [playerName, setPlayerName] = useState("");
   const [playerStats, setPlayerStats] = useState(null);
   const [playerMarker, setPlayerMarker] = useState("X");
+  const [playFirst, setPlayFirst] = useState(true);
+  const [joinCode, setJoinCode] = useState("");
+  const [notice, setNotice] = useState("");
+  const [copied, setCopied] = useState(false);
 
   const [moveHistory, setMoveHistory] = useState([]);
   const [showHistory, setShowHistory] = useState(false);
   const [focusedCell, setFocusedCell] = useState({ row: 0, col: 0 });
-  const [gameResult, setGameResult] = useState(null);
   const [connectionStatus, setConnectionStatus] = useState('disconnected');
   const [wsSessionId, setWsSessionId] = useState(null);
   const [opponentConnected, setOpponentConnected] = useState(false);
   const [sessionId, setSessionId] = useState(null);
   const boardRef = useRef(null);
+  const mainRef = useRef(null);
+  const seenBlocks = useRef(new WeakSet());
   const wsRef = useRef(null);
   const reconnectTimeoutRef = useRef(null);
   const reconnectAttempts = useRef(0);
@@ -59,16 +108,13 @@ function App() {
   }, []);
 
   const fetchPlayerProfile = useCallback(async (username) => {
+    if (!username) return;
     try {
-      const response = await fetch(`${API_BASE_URL}/player/${username}`);
+      const response = await fetch(`${API_BASE_URL}/player/${encodeURIComponent(username)}`);
       const data = await response.json();
-      if (!data.error && !data.message) {
-        setPlayerStats(data);
-      } else {
-        setPlayerStats(null);
-      }
+      setPlayerStats(response.ok && !data.error && !data.message ? data : null);
     } catch (err) {
-      console.error("Failed to fetch Postgres records:", err);
+      console.error("Failed to fetch player record:", err);
     }
   }, []);
 
@@ -137,6 +183,7 @@ function App() {
 
       case 'ready':
         setOpponentConnected(true);
+        setNotice("");
         break;
 
       case 'state':
@@ -152,22 +199,16 @@ function App() {
         if (payload.winner_combo) {
           setWinnerCombo(payload.winner_combo);
         }
-        if (payload.winner) {
-          playSound(payload.winner === playerMarker ? 'win' : 'lose');
-          setGameResult(payload.winner === playerMarker ? 'win' : 'lose');
-        } else {
-          playSound('draw');
-          setGameResult('draw');
-        }
+        playSound(!payload.winner ? 'draw' : payload.winner === playerMarker ? 'win' : 'lose');
         break;
 
       case 'opponent_disconnected':
         setOpponentConnected(false);
-        alert(payload.message);
+        setNotice("Your friend left the game. They can rejoin with the same code.");
         break;
 
       case 'error':
-        alert(payload);
+        setNotice(typeof payload === 'string' ? payload : 'Something went wrong with the online game.');
         break;
 
       case 'pong':
@@ -182,72 +223,73 @@ function App() {
     latest.current = { gameStarted, gameMode, wsSessionId, playerMarker, handleWSMessage, connectWebSocket };
   });
 
-  const handleGameInitialization = useCallback(async (mode) => {
-    const nameInput = prompt("Enter your username to register this play session:");
-    if (!nameInput || nameInput.trim() === "") {
-      alert("A valid user name identifier is mandatory to start!");
+  const resetRound = () => {
+    setMoveHistory([]);
+    setFocusedCell({ row: 0, col: 0 });
+    setNotice("");
+  };
+
+  const startGame = useCallback(async (event) => {
+    event.preventDefault();
+    const cleanName = playerName.trim();
+    if (!cleanName) {
+      setNotice("Enter your name to start.");
       return;
     }
-    const cleanName = nameInput.trim();
 
-    let chosenMarker = "X";
-    if (mode === "vs_system") {
-      const goFirst = window.confirm("Would you like to take the opening move as X? (Click OK for X, Cancel to let Bot play first as X while you play as O)");
-      chosenMarker = goFirst ? "X" : "O";
-    }
-
-    if (mode === "vs_player_ws") {
+    if (gameMode === "vs_player_ws") {
+      const code = joinCode.trim();
       try {
-        const response = await fetch(`${API_BASE_URL}/ws/create`, {
-          method: 'GET',
-          headers: { 'Content-Type': 'application/json' }
-        });
-        const data = await response.json();
-        setWsSessionId(data.session_id);
-        setPlayerMarker('X');
+        let session = code;
+        if (!session) {
+          const response = await fetch(`${API_BASE_URL}/ws/create`);
+          session = (await response.json()).session_id;
+        }
+        setWsSessionId(session);
+        setOpponentConnected(false);
         setConnectionStatus('connecting');
-        connectWebSocket(data.session_id, 'X');
+        // Creator asks for X; a joiner takes whichever seat is free.
+        connectWebSocket(session, code ? null : 'X');
+        if (!code) setPlayerMarker('X');
       } catch (err) {
         console.error("WS session creation failed:", err);
-        alert("Failed to create WebSocket session");
+        setNotice("Couldn't create an online game. Check that the server is running.");
         return;
       }
     } else {
+      const chosenMarker = gameMode === "vs_system" && !playFirst ? "O" : "X";
       try {
         const response = await fetch(`${API_BASE_URL}/start`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ mode: mode, difficulty: difficulty, starting_player: chosenMarker })
+          body: JSON.stringify({ mode: gameMode, difficulty: difficulty, starting_player: chosenMarker })
         });
         const data = await response.json();
+        if (!response.ok) throw new Error(data.detail || response.statusText);
         syncGameState(data);
         setSessionId(data.session_id);
         setPlayerMarker(chosenMarker);
       } catch (err) {
-        console.error("Initialization pipeline broken:", err);
+        console.error("Game start failed:", err);
+        setNotice("Couldn't start the game. Check that the server is running.");
         return;
       }
     }
 
     setPlayerName(cleanName);
-    setGameMode(mode);
+    resetRound();
     setGameStarted(true);
-    setMoveHistory([]);
-    setFocusedCell({ row: 0, col: 0 });
-    setGameResult(null);
     void fetchPlayerProfile(cleanName);
-  }, [difficulty, syncGameState, fetchPlayerProfile, connectWebSocket]);
+  }, [playerName, gameMode, joinCode, playFirst, difficulty, syncGameState, fetchPlayerProfile, connectWebSocket]);
 
   const handlePlayAgain = useCallback(async () => {
     if (gameMode === 'vs_player_ws') {
       try {
-        const response = await fetch(`${API_BASE_URL}/ws/create`, {
-          method: 'GET',
-          headers: { 'Content-Type': 'application/json' }
-        });
+        const response = await fetch(`${API_BASE_URL}/ws/create`);
         const data = await response.json();
         setWsSessionId(data.session_id);
         setPlayerMarker('X');
+        setOpponentConnected(false);
         connectWebSocket(data.session_id, 'X');
       } catch (err) {
         console.error("WS session creation failed:", err);
@@ -263,69 +305,54 @@ function App() {
         syncGameState(data);
         setSessionId(data.session_id);
       } catch (err) {
-        console.error("Quick restart sequence broke:", err);
+        console.error("Restart failed:", err);
       }
     }
-    setMoveHistory([]);
-    setFocusedCell({ row: 0, col: 0 });
-    setGameResult(null);
+    resetRound();
     setHasWinner(false);
     setIsTied(false);
   }, [gameMode, difficulty, playerMarker, syncGameState, connectWebSocket]);
+
+  const leaveGame = () => {
+    if (wsRef.current) {
+      wsRef.current.onclose = null;
+      wsRef.current.close();
+      wsRef.current = null;
+    }
+    clearTimeout(reconnectTimeoutRef.current);
+    setGameStarted(false);
+    setNotice("");
+  };
 
   const recordMoveInHistory = useCallback((row, col, player, isAi = false) => {
     setMoveHistory(prev => [...prev, { row, col, player, isAi, timestamp: Date.now() }]);
   }, []);
 
   const processEndgame = useCallback(async (finalData, activePlayerName) => {
-    let result = "draw";
-
-    if (finalData.has_winner) {
-      const humanWon = finalData.current_player === playerMarker;
-
-      if (gameMode === "vs_system") {
-        result = humanWon ? "win" : "loss";
-        playSound(humanWon ? 'win' : 'lose');
-        setGameResult(humanWon ? 'win' : 'lose');
-        alert(humanWon ? "You beat the AI!" : "The AI outsmarted you. Game Over!");
-      } else {
-        const winningToken = finalData.current_player;
-        alert(`Match completed! Player ${winningToken} wins!`);
-        setGameResult('win');
-        return;
-      }
-    } else if (finalData.is_tied) {
-      playSound('draw');
-      setGameResult('draw');
-      alert("Match concluded in an absolute tie!");
-      if (gameMode !== "vs_system") return;
-    }
-
-    if (gameMode !== 'vs_player_ws') {
-      try {
-        const response = await fetch(`${API_BASE_URL}/record-match`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            username: activePlayerName,
-            difficulty: difficulty,
-            result: result
-          })
-        });
-        const updatedStats = await response.json();
-        if (!response.ok) throw new Error(updatedStats.detail || response.statusText);
-        setPlayerStats(updatedStats);
-      } catch (err) {
-        console.error("Postgres dashboard sync failed:", err);
-      }
+    if (gameMode !== "vs_system") return;
+    const result = !finalData.has_winner ? "draw" : finalData.current_player === playerMarker ? "win" : "loss";
+    try {
+      const response = await fetch(`${API_BASE_URL}/record-match`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: activePlayerName, difficulty: difficulty, result: result })
+      });
+      const updatedStats = await response.json();
+      if (!response.ok) throw new Error(updatedStats.detail || response.statusText);
+      setPlayerStats(updatedStats);
+    } catch (err) {
+      console.error("Saving the result failed:", err);
+      setNotice("This result wasn't saved to your record. Check that the database is running.");
     }
   }, [gameMode, playerMarker, difficulty]);
 
+  const isMyTurnOnline = gameMode !== 'vs_player_ws' || (opponentConnected && currentPlayer === playerMarker);
+
   const handleCellClick = useCallback(async (row, col) => {
-    if (hasWinner || isTied) return;
+    if (hasWinner || isTied || board[row][col] !== "") return;
 
     if (gameMode === 'vs_player_ws') {
-      if (wsRef.current?.readyState === WebSocket.OPEN) {
+      if (isMyTurnOnline && wsRef.current?.readyState === WebSocket.OPEN) {
         wsRef.current.send(JSON.stringify({ type: 'move', row, col }));
       }
       return;
@@ -355,235 +382,322 @@ function App() {
         playSound('move');
       }
     } catch (err) {
-      console.error("Turn execution failed:", err);
+      console.error("Move failed:", err);
+      setNotice("That move didn't go through. The game may have expired; start a new one.");
     }
-  }, [hasWinner, isTied, gameMode, sessionId, board, currentPlayer, playerName, recordMoveInHistory, syncGameState, processEndgame]);
+  }, [hasWinner, isTied, gameMode, isMyTurnOnline, sessionId, board, currentPlayer, playerName, recordMoveInHistory, syncGameState, processEndgame]);
 
   const handleKeyDown = useCallback((e) => {
-    if (!gameStarted || hasWinner || isTied) return;
+    if (!gameStarted) return;
 
-    let { row, col } = focusedCell;
-    const maxIndex = 5;
-
-    switch (e.key) {
-      case 'ArrowUp':
-        e.preventDefault();
-        setFocusedCell(prev => ({ ...prev, row: Math.max(0, prev.row - 1) }));
-        break;
-      case 'ArrowDown':
-        e.preventDefault();
-        setFocusedCell(prev => ({ ...prev, row: Math.min(maxIndex, prev.row + 1) }));
-        break;
-      case 'ArrowLeft':
-        e.preventDefault();
-        setFocusedCell(prev => ({ ...prev, col: Math.max(0, prev.col - 1) }));
-        break;
-      case 'ArrowRight':
-        e.preventDefault();
-        setFocusedCell(prev => ({ ...prev, col: Math.min(maxIndex, prev.col + 1) }));
-        break;
-      case 'Enter':
-      case ' ':
-        e.preventDefault();
-        if (board[row][col] === "") {
-          handleCellClick(row, col);
-        }
-        break;
-      case 'h':
-      case 'H':
-        if (e.ctrlKey || e.metaKey) {
-          e.preventDefault();
-          setShowHistory(prev => !prev);
-        }
-        break;
-      default:
-        break;
+    if ((e.key === 'h' || e.key === 'H') && (e.ctrlKey || e.metaKey)) {
+      e.preventDefault();
+      setShowHistory(prev => !prev);
+      return;
     }
-  }, [gameStarted, hasWinner, isTied, focusedCell, board, handleCellClick]);
+
+    const steps = { ArrowUp: [-1, 0], ArrowDown: [1, 0], ArrowLeft: [0, -1], ArrowRight: [0, 1] };
+    if (!steps[e.key]) return;
+    // Arrows steer the board only when nothing else (like a button) has focus.
+    const inBoard = boardRef.current?.contains(document.activeElement);
+    if (!inBoard && document.activeElement !== document.body) return;
+
+    e.preventDefault();
+    const [dr, dc] = steps[e.key];
+    const row = Math.min(5, Math.max(0, focusedCell.row + dr));
+    const col = Math.min(5, Math.max(0, focusedCell.col + dc));
+    setFocusedCell({ row, col });
+    boardRef.current?.querySelector(`[data-cell="${row}-${col}"]`)?.focus();
+  }, [gameStarted, focusedCell]);
 
   useEffect(() => {
     window.addEventListener('keydown', handleKeyDown);
-    return () => {
-      window.removeEventListener('keydown', handleKeyDown);
-      if (reconnectTimeoutRef.current) {
-        clearTimeout(reconnectTimeoutRef.current);
-      }
-      if (wsRef.current) {
-        wsRef.current.close();
-      }
-    };
+    return () => window.removeEventListener('keydown', handleKeyDown);
   }, [handleKeyDown]);
 
-  const isCoordinateInScorePath = (r, c) => {
-    return winnerCombo.some(([sr, sc]) => sr === r && sc === c);
-  };
-
-  const getCellAriaLabel = (row, col, cellValue) => {
-    if (cellValue) return `Cell ${row + 1}, ${col + 1}, occupied by ${cellValue}`;
-    return `Cell ${row + 1}, ${col + 1}, empty. Press Enter to place ${currentPlayer}`;
-  };
-
-  const getConnectionStatusColor = () => {
-    switch (connectionStatus) {
-      case 'connected': return '#10b981';
-      case 'connecting': return '#f59e0b';
-      case 'error': return '#ef4444';
-      default: return '#64748b';
+  useEffect(() => () => {
+    clearTimeout(reconnectTimeoutRef.current);
+    if (wsRef.current) {
+      wsRef.current.onclose = null;
+      wsRef.current.close();
     }
+  }, []);
+
+  // Every block fades in from above the first time it appears, in top-to-bottom order.
+  useLayoutEffect(() => {
+    const fresh = [...mainRef.current.querySelectorAll('.reveal')].filter(el => !seenBlocks.current.has(el));
+    if (!fresh.length) return;
+    fresh.forEach(el => seenBlocks.current.add(el));
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    fresh.sort((a, b) => a.getBoundingClientRect().top - b.getBoundingClientRect().top);
+    gsap.from(fresh, { opacity: 0, y: -16, duration: 0.5, ease: 'power2.out', stagger: 0.05, clearProps: 'opacity,transform' });
+  });
+
+  const copyCode = () => {
+    navigator.clipboard?.writeText(wsSessionId).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    }).catch(() => {});
   };
+
+  const isScored = (r, c) => winnerCombo.some(([sr, sc]) => sr === r && sc === c);
+  const lastMove = moveHistory[moveHistory.length - 1];
+  const opponentMarker = playerMarker === 'X' ? 'O' : 'X';
+  const gameOver = hasWinner || isTied;
+  const nightmareUnlocked = ["Hard", "Nightmare"].includes(playerStats?.highest_difficulty);
+  const opponentName = gameMode === 'vs_system' ? 'Mimika' : 'Friend';
+
+  const statusText = (() => {
+    if (hasWinner) {
+      if (gameMode === 'vs_player') return `${currentPlayer} wins`;
+      return currentPlayer === playerMarker ? 'You win' : `${opponentName} wins`;
+    }
+    if (isTied) return 'Draw. The board is full.';
+    if (gameMode === 'vs_player_ws') {
+      if (connectionStatus === 'error' || connectionStatus === 'disconnected') return 'Reconnecting';
+      if (!opponentConnected) return 'Waiting for your friend';
+    }
+    if (gameMode === 'vs_player') return `${currentPlayer} to move`;
+    return currentPlayer === playerMarker ? 'Your move' : `${opponentName} to move`;
+  })();
+
+  const scoreRows = gameMode === 'vs_player'
+    ? [
+        { marker: 'X', name: 'X', detail: 'Moves first' },
+        { marker: 'O', name: 'O', detail: null },
+      ]
+    : [
+        { marker: playerMarker, name: playerName || 'You', detail: 'You' },
+        { marker: opponentMarker, name: opponentName, detail: gameMode === 'vs_system' ? difficulty : null },
+      ];
+
+  if (!gameStarted) {
+    return (
+      <main className="app setup" ref={mainRef}>
+        <header className="intro reveal">
+          <h1 className="wordmark">HexTacTic</h1>
+        </header>
+
+        <div className="setup-grid">
+          <div className="setup-aside">
+            <p className="rules reveal">A 6 by 6 board. Every three in a row scores a point. First to 3 points wins.</p>
+            {playerStats && (
+              <section className="record reveal" aria-labelledby="record-title">
+                <h2 id="record-title">{playerName.trim()}'s record against Mimika</h2>
+                <table>
+                  <thead>
+                    <tr><th scope="col">Level</th><th scope="col">Wins</th><th scope="col">Losses</th><th scope="col">Draws</th></tr>
+                  </thead>
+                  <tbody>
+                    {DIFFICULTIES.map(level => {
+                      const key = level.toLowerCase();
+                      return (
+                        <tr key={level}>
+                          <th scope="row">{level}</th>
+                          <td>{playerStats[`${key}_wins`] ?? 0}</td>
+                          <td>{playerStats[`${key}_losses`] ?? 0}</td>
+                          <td>{playerStats[`${key}_draws`] ?? 0}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+                <p className="field-hint">Highest level reached: {playerStats.highest_difficulty || 'Easy'}</p>
+              </section>
+            )}
+          </div>
+          <form className="setup-form" onSubmit={startGame} noValidate>
+            <label className="field reveal">
+              <span className="field-label">Your name</span>
+              <input
+                type="text"
+                value={playerName}
+                onChange={(e) => setPlayerName(e.target.value)}
+                onBlur={() => fetchPlayerProfile(playerName.trim())}
+                autoComplete="nickname"
+                maxLength={64}
+                placeholder="e.g. Sam"
+              />
+            </label>
+
+            <fieldset className="field">
+              <legend className="field-label reveal">Opponent</legend>
+              <div className="choice-list">
+                {MODES.map(mode => (
+                  <label key={mode.value} className="choice reveal">
+                    <input
+                      type="radio"
+                      name="mode"
+                      value={mode.value}
+                      checked={gameMode === mode.value}
+                      onChange={() => setGameMode(mode.value)}
+                    />
+                    <span className="choice-body">
+                      <span className="choice-label">{mode.label}</span>
+                      <span className="choice-hint">{mode.hint}</span>
+                    </span>
+                  </label>
+                ))}
+              </div>
+            </fieldset>
+
+            {gameMode === 'vs_system' && (
+              <>
+                <fieldset className="field">
+                  <legend className="field-label reveal">Mimika's level</legend>
+                  <div className="segmented reveal">
+                    {DIFFICULTIES.map(level => {
+                      const locked = level === 'Nightmare' && !nightmareUnlocked;
+                      return (
+                        <label key={level} className={`segment${locked ? ' is-locked' : ''}`} title={locked ? 'Win a game on Hard to unlock' : undefined}>
+                          <input
+                            type="radio"
+                            name="difficulty"
+                            value={level}
+                            checked={difficulty === level}
+                            disabled={locked}
+                            onChange={() => setDifficulty(level)}
+                          />
+                          <span>{level}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                  {!nightmareUnlocked && <p className="field-hint reveal">Win a game on Hard to unlock Nightmare.</p>}
+                </fieldset>
+
+                <label className="toggle reveal">
+                  <input type="checkbox" checked={playFirst} onChange={(e) => setPlayFirst(e.target.checked)} />
+                  <span>I'll move first as X</span>
+                </label>
+              </>
+            )}
+
+            {gameMode === 'vs_player_ws' && (
+              <label className="field reveal">
+                <span className="field-label">Game code</span>
+                <input
+                  type="text"
+                  value={joinCode}
+                  onChange={(e) => setJoinCode(e.target.value)}
+                  autoComplete="off"
+                  spellCheck="false"
+                  placeholder="Leave empty to start a new game"
+                />
+              </label>
+            )}
+
+            {notice && <p className="notice reveal" role="alert">{notice}</p>}
+
+            <button type="submit" className="button primary reveal">
+              {gameMode === 'vs_player_ws' && joinCode.trim() ? 'Join game' : 'Start game'}
+            </button>
+          </form>
+        </div>
+
+      </main>
+    );
+  }
 
   return (
-    <div className="app-container" role="application" aria-label="6x6 Tic-Tac-Toe Game">
-      <h1>6x6 Tic-Tac-Toe Engine</h1>
+    <main className="app game" ref={mainRef}>
+      <header className="game-header reveal">
+        <span className="wordmark small">HexTacTic</span>
+        <button className="button ghost" onClick={leaveGame}>Main menu</button>
+      </header>
 
-      {!gameStarted ? (
-        <div className="setup-screen">
-          <h2>Select Configuration</h2>
-
-          <div className="difficulty-selector">
-            <label htmlFor="difficulty-select">Difficulty Level: </label>
-            <select
-              id="difficulty-select"
-              value={difficulty}
-              onChange={(e) => setDifficulty(e.target.value)}
-            >
-              <option value="Easy">Easy</option>
-              <option value="Normal">Normal</option>
-              <option value="Hard">Hard</option>
-              {(playerStats?.highest_difficulty === "Hard" || playerStats?.highest_difficulty === "Nightmare") && (
-                <option value="Nightmare">Nightmare (DDQN AI)</option>
-              )}
-            </select>
+      <div className="game-layout">
+        <div className="board-wrap">
+          <div className="coords coords-cols reveal" aria-hidden="true">
+            {COLUMNS.split('').map(c => <span key={c}>{c}</span>)}
           </div>
-
-          <div className="mode-buttons">
-            <button onClick={() => handleGameInitialization("vs_player")}>Player vs Player (HTTP)</button>
-            <button onClick={() => handleGameInitialization("vs_player_ws")}>Player vs Player (Real-time WebSocket)</button>
-            <button onClick={() => handleGameInitialization("vs_system")}>Player vs System (AI)</button>
+          <div className="coords coords-rows reveal" aria-hidden="true">
+            {[1, 2, 3, 4, 5, 6].map(r => <span key={r}>{r}</span>)}
           </div>
-        </div>
-      ) : (
-        <div className="game-screen">
-          <div className="status-bar" role="status" aria-live="polite">
-            <div className="score-display">
-              Points Scoreboard:
-              <span className="X"> X: {scores.X} /3</span> |
-              <span className="O">O: {scores.O}/3</span>
-            </div>
-            {gameMode === 'vs_player_ws' && (
-              <div className="connection-indicator" style={{ marginTop: '0.5rem' }}>
-                <span className="connection-dot" style={{ backgroundColor: getConnectionStatusColor() }}></span>
-                <span className="connection-text">
-                  {connectionStatus === 'connected' ? (opponentConnected ? 'Connected • Opponent ready' : 'Connected • Waiting for opponent...') :
-                   connectionStatus === 'connecting' ? 'Connecting...' :
-                   connectionStatus === 'error' ? 'Connection error' : 'Disconnected'}
-                </span>
-                {wsSessionId && (
-                  <button className="session-id-btn" onClick={() => navigator.clipboard.writeText(wsSessionId)}>
-                    Share ID: {wsSessionId}
-                  </button>
-                )}
-              </div>
-            )}
-            {hasWinner ? (
-              <span className="status-text win">Match Decided!</span>
-            ) : isTied ? (
-              <span className="status-text tie">Match Tied!</span>
-            ) : (
-              <span className="status-text">
-                Active Turn:
-                <strong className={currentPlayer} aria-live="assertive">{currentPlayer}</strong>
-              </span>
-            )}
-          </div>
-
-          <div className="game-main">
-            <div className="grid-container" role="grid" aria-label="Game board" ref={boardRef}>
-              {board.map((row, rowIndex) => (
-                <div key={rowIndex} className="grid-row" role="row">
-                  {row.map((cellValue, colIndex) => (
+          <div className="board" role="grid" aria-label="Game board" ref={boardRef}>
+            {board.map((row, rowIndex) => (
+              <div key={rowIndex} className="board-row reveal" role="row">
+                {row.map((cellValue, colIndex) => {
+                  const isCursor = focusedCell.row === rowIndex && focusedCell.col === colIndex;
+                  const unavailable = gameOver || cellValue !== "" || !isMyTurnOnline;
+                  const isLast = lastMove && lastMove.row === rowIndex && lastMove.col === colIndex;
+                  return (
                     <button
                       key={colIndex}
-                      className={`grid-cell ${cellValue} ${isCoordinateInScorePath(rowIndex, colIndex) ? 'winner-highlight' : ''} ${focusedCell.row === rowIndex && focusedCell.col === colIndex ? 'focused' : ''}`}
-                      onClick={() => handleCellClick(rowIndex, colIndex)}
-                      disabled={hasWinner || isTied || cellValue !== "" || (gameMode === 'vs_player_ws' && currentPlayer !== playerMarker)}
+                      type="button"
                       role="gridcell"
-                      aria-label={getCellAriaLabel(rowIndex, colIndex, cellValue)}
-                      aria-selected={focusedCell.row === rowIndex && focusedCell.col === colIndex}
-                      tabIndex={focusedCell.row === rowIndex && focusedCell.col === colIndex ? 0 : -1}
+                      data-cell={`${rowIndex}-${colIndex}`}
+                      className={`cell${isScored(rowIndex, colIndex) ? ' is-scored' : ''}${isLast ? ' is-last' : ''}`}
+                      onClick={() => handleCellClick(rowIndex, colIndex)}
+                      onFocus={() => setFocusedCell({ row: rowIndex, col: colIndex })}
+                      aria-disabled={unavailable}
+                      aria-label={cellValue ? `${cellName(rowIndex, colIndex)}, ${cellValue}` : `${cellName(rowIndex, colIndex)}, empty`}
+                      tabIndex={isCursor ? 0 : -1}
                     >
-                      {cellValue}
+                      <Mark value={cellValue} />
                     </button>
-                  ))}
-                </div>
-              ))}
-            </div>
-
-            <div className="side-panel">
-              <div className="controls">
-                <button className="history-toggle" onClick={() => setShowHistory(!showHistory)}>
-                  {showHistory ? 'Hide' : 'Show'} Move History
-                </button>
-                <div className="keyboard-hint">
-                  <kbd>↑↓←→</kbd> Navigate &nbsp;
-                  <kbd>Enter</kbd> Place &nbsp;
-                  <kbd>Ctrl+H</kbd> History
-                </div>
+                  );
+                })}
               </div>
-
-              {showHistory && moveHistory.length > 0 && (
-                <div className="move-history" role="log" aria-label="Move history">
-                  <h3>Move History</h3>
-                  <ul>
-                    {moveHistory.map((move, idx) => (
-                      <li key={idx} className={move.isAi ? 'ai-move' : ''}>
-                        <span className="move-player">{move.player}</span>
-                        <span className="move-coords">({move.row + 1}, {move.col + 1})</span>
-                        {move.isAi && <span className="ai-badge">AI</span>}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-
-              {gameResult && (
-                <div className={`game-result ${gameResult}`} role="alert">
-                  {gameResult === 'win' && '🎉 Victory!'}
-                  {gameResult === 'lose' && '🤖 AI Wins'}
-                  {gameResult === 'draw' && '🤝 Draw'}
-                </div>
-              )}
-            </div>
-          </div>
-
-          <div className="action-buttons-row">
-            {(hasWinner || isTied) && (
-              <button className="play-again-btn" onClick={handlePlayAgain}>Play Again</button>
-            )}
-            <button className="back-btn" onClick={() => setGameStarted(false)}>Main Menu</button>
+            ))}
           </div>
         </div>
-      )}
 
-      <hr className="divider" />
+        <aside className="panel">
+          <p className="status reveal" role="status" aria-live="polite">{statusText}</p>
 
-      <div className="leaderboard-section">
-        <h2>Active Player Postgres Dashboard</h2>
-        {playerStats ? (
-          <div className="stats-container">
-            <h3>Player Profile: <strong>{playerName}</strong></h3>
-            <div className="difficulty-badge-container">
-              <span className="difficulty-label">Highest Difficulty Reached:</span>
-              <span className={`difficulty-badge ${(playerStats.highest_difficulty || 'Easy').toLowerCase()}`}>
-                {playerStats.highest_difficulty || 'Easy'}
-              </span>
-            </div>
+          <div className="scores">
+            {scoreRows.map(row => (
+              <ScoreRow
+                key={row.marker}
+                {...row}
+                points={Math.min(3, scores[row.marker] ?? 0)}
+                active={!isTied && currentPlayer === row.marker}
+              />
+            ))}
           </div>
-        ) : (
-          <p className="no-scores">Log in above to view historical Postgres stats tracking records.</p>
-        )}
+
+          {gameMode === 'vs_player_ws' && wsSessionId && !opponentConnected && !gameOver && (
+            <div className="share reveal">
+              <p className="field-hint">Send this code to your friend. They choose Friend, online and enter it.</p>
+              <div className="share-row">
+                <code className="share-code">{wsSessionId}</code>
+                <button className="button ghost" onClick={copyCode}>{copied ? 'Copied' : 'Copy code'}</button>
+              </div>
+            </div>
+          )}
+
+          {notice && <p className="notice reveal" role="alert">{notice}</p>}
+
+          {gameOver && (
+            <button className="button primary reveal" onClick={handlePlayAgain}>Play again</button>
+          )}
+
+          <div className="moves reveal">
+            <button className="button text" onClick={() => setShowHistory(prev => !prev)} aria-expanded={showHistory}>
+              {showHistory ? 'Hide moves' : 'Show moves'}
+            </button>
+            {showHistory && (
+              moveHistory.length > 0 ? (
+                <ol className="move-list" aria-label="Moves">
+                  {moveHistory.map((move, idx) => (
+                    <li key={idx}>
+                      <span className="move-mark"><Mark value={move.player} /></span>
+                      <span>{cellName(move.row, move.col)}</span>
+                      {move.isAi && <span className="move-by">Mimika</span>}
+                    </li>
+                  ))}
+                </ol>
+              ) : (
+                <p className="field-hint">No moves yet. Pick any square to start.</p>
+              )
+            )}
+          </div>
+
+          <p className="keys reveal">Arrow keys move between squares, Enter places a mark, Ctrl+H shows moves.</p>
+        </aside>
       </div>
-    </div>
+    </main>
   );
 }
 

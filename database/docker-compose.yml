@@ -1,0 +1,23 @@
+# Start from the repo root:  docker compose --env-file .env -f database/docker-compose.yml up -d
+# The password comes from LOCAL_DB_PASSWORD in the root .env.
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: hextactic-postgres
+    environment:
+      POSTGRES_DB: hextactic
+      POSTGRES_USER: hextactic
+      POSTGRES_PASSWORD: ${LOCAL_DB_PASSWORD:?Set LOCAL_DB_PASSWORD in the root .env and pass --env-file .env}
+    ports:
+      - "127.0.0.1:5433:5432"   # 5433 avoids collision with any system-level Postgres on 5432
+    volumes:
+      - hextactic-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U hextactic -d hextactic"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+volumes:
+  hextactic-pgdata:

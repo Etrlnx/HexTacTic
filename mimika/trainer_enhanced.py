@@ -13,7 +13,14 @@ from torch.utils.tensorboard import SummaryWriter
 
 from .agent import DQNAgent
 from .config import DQNconf as cfg
-from .model_registry import DEFAULT_REGISTRY_DIR, ModelRegistry, ModelEvaluator, evaluate_model_vs_random, play_match
+from .model_registry import (
+    DEFAULT_REGISTRY_DIR,
+    ModelEvaluator,
+    ModelRegistry,
+    evaluate_model_vs_heuristic,
+    evaluate_model_vs_random,
+    play_match,
+)
 from .trainer import WEIGHTS_PATH, play_episode
 
 DEFAULT_LOG_DIR = DEFAULT_REGISTRY_DIR.parent / "logs" / "training"
@@ -159,8 +166,14 @@ class EnhancedTrainer:
         eval_results = evaluate_model_vs_random(model, games=50, device=self.device)
         self.monitor.log_evaluation(episode, eval_results)
 
-        win_rate = eval_results["win_rate"]
-        print(f"  vs Random: Win={win_rate:.2%}, Loss={eval_results['loss_rate']:.2%}, Draw={eval_results['draw_rate']:.2%}")
+        r = eval_results
+        print(f"  vs Random: Win={r['win_rate']:.2%}, Loss={r['loss_rate']:.2%}, Draw={r['draw_rate']:.2%}")
+
+        # "Best" is judged against the heuristic: beating random is too low a bar to rank checkpoints.
+        heuristic = evaluate_model_vs_heuristic(model, games=100, device=self.device)
+        self.monitor.log_evaluation(episode, {f"heuristic_{k}": v for k, v in heuristic.items()})
+        win_rate = heuristic["win_rate"]
+        print(f"  vs Heuristic: Win={win_rate:.2%}, Loss={heuristic['loss_rate']:.2%}, Draw={heuristic['draw_rate']:.2%}")
 
         current = self.registry._index["current"]
         if current and episode % (self.eval_interval * 2) == 0:
@@ -176,7 +189,7 @@ class EnhancedTrainer:
             self.registry.register_model(
                 WEIGHTS_PATH,
                 version,
-                metadata={"eval_win_rate": win_rate, "episode": episode},
+                metadata={"heuristic_win_rate": win_rate, "random_win_rate": r["win_rate"], "episode": episode},
                 make_current=True,
             )
             print(f"  New best model! Win rate: {win_rate:.2%} (saved as {version})")

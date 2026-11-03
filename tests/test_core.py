@@ -58,6 +58,40 @@ def test_registry_lists_trainer_versions_and_evaluates():
     assert result["wins"] + result["losses"] + result["draws"] == 2
 
 
+def test_heuristic_points_match_engine():
+    import copy
+    import random
+
+    from mimika.model_registry import _points_if_played, heuristic_move
+    from script import TicTacToeGame
+
+    rng = random.Random(0)
+    for _ in range(200):
+        game = TicTacToeGame()
+        for _ in range(rng.randrange(25)):
+            cells = [(r, c) for r in range(6) for c in range(6) if game._current_moves[r][c] == ""]
+            game.process_move(*rng.choice(cells))
+            if game._has_winner:
+                break
+        if game._has_winner:
+            continue
+        for r in range(6):
+            for c in range(6):
+                if game._current_moves[r][c] == "":
+                    trial = copy.deepcopy(game)
+                    trial.process_move(r, c)
+                    gained = trial.scores[game.current_player] - game.scores[game.current_player]
+                    assert _points_if_played(game._current_moves, r, c, game.current_player) == gained
+
+    # X to move can score at (0, 2); O threatens (5, 2). Scoring beats blocking.
+    board = [["X", "X", "", "", "", ""]] + [[""] * 6 for _ in range(4)] + [["O", "O", "", "", "", ""]]
+    moves = [r * 6 + c for r in range(6) for c in range(6) if board[r][c] == ""]
+    assert heuristic_move(board, "X", moves) == 2
+    board[0][1] = ""
+    moves.append(1)
+    assert heuristic_move(board, "X", moves) == 32  # nothing to score: block O
+
+
 def test_ws_ready_is_top_level_message():
     from fastapi.testclient import TestClient
 

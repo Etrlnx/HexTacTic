@@ -4,7 +4,7 @@ class DQNconf:
     BOARD_SIZE = 6
     IP_CHANNELS = 3
     
-    LR = 0.001              # learning rate
+    LR = 0.0001             # learning rate (1e-3 let Q-values blow up)
     GAMMA = 0.99            # discount factor
     BATCH_SIZE = 64
     MEMORY_SIZE = 50000     # memory buffer size

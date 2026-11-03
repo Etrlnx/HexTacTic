@@ -5,7 +5,7 @@ The HexTacTic persistence layer uses **PostgreSQL** to store durable player prog
 The database deliberately stores player history rather than live game state. Active games remain in the application session manager and are therefore independent from the persistent scoreboard.
 
 > **Scope:** This document covers PostgreSQL architecture, schema, connection pooling, migrations and persistence operations.  
-> Application/API behavior is documented in `HexTacTic_README.md`.
+> Application/API behavior is documented in `README.md`.
 
 ---
 
@@ -528,8 +528,8 @@ The database therefore functions as the **historical player-progression layer**,
 
 ## Related Documentation
 
-- `HexTacTic_README.md` — API, frontend, backend and runtime architecture.
-- `Mimika_README.md` — AI model and reinforcement-learning subsystem.
+- `README.md` — API, frontend, backend and runtime architecture.
+- `mimika/README.md` — AI model and reinforcement-learning subsystem.
 
 ---
 

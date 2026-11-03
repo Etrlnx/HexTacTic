@@ -415,6 +415,12 @@ Training writes its latest weights to `saved_models/dqn_model_weights.pth` (giti
 
 The deployed application serves `saved_models/best_model.pt`, the benchmarked best model. To promote a newly trained model, benchmark it against `best_model.pt` and copy the winner over it.
 
+Checkpoints are judged against two baselines in `model_registry.py`: uniform random play and `heuristic_move`, which scores a line when it can, otherwise blocks the opponent's best line, otherwise plays randomly. The heuristic beats random almost every game, so it is the bar `trainer_enhanced.py` uses to pick `best_*` checkpoints. From the CLI:
+
+```bash
+python -m mimika.evaluate --version best_500 --vs-random 200 --vs-heuristic 200
+```
+
 ---
 
 ## Configuration
@@ -560,8 +566,8 @@ The current trainer saves checkpoints every 500 episodes and at the end of train
 
 ## Related Documentation
 
-- `HexTacTic_README.md` — application architecture and API integration.
-- `Database_README.md` — PostgreSQL persistence layer.
+- `README.md` — application architecture and API integration.
+- `about-database.md` — PostgreSQL persistence layer.
 
 ---
 

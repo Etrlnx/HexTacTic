@@ -44,11 +44,14 @@ class DQNAgent:
 
         current_q = self.policynet(state_batch).gather(1, action_batch)
         with torch.no_grad():
-            next_actions = self.policynet(next_state_batch).argmax(dim=1, keepdim=True)
+            # Only empty cells (channel 0) are legal next moves. Untrained Q-values of occupied cells
+            # must not be bootstrapped, or the targets diverge.
+            occupied = next_state_batch[:, 0].flatten(1) == 0
+            next_actions = self.policynet(next_state_batch).masked_fill(occupied, float("-inf")).argmax(dim=1, keepdim=True)
             next_q = self.targnet(next_state_batch).gather(1, next_actions)
             target_q = reward_batch + cfg.GAMMA * next_q * (1 - done_batch)
 
-        loss = F.mse_loss(current_q, target_q)
+        loss = F.smooth_l1_loss(current_q, target_q)  # Huber: bounded gradients on large TD errors
         self.optimizer.zero_grad()
         loss.backward()
         torch.nn.utils.clip_grad_norm_(self.policynet.parameters(), max_norm=1.0)

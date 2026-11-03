@@ -14,6 +14,7 @@ def main():
     parser.add_argument("--registry", default=str(DEFAULT_REGISTRY_DIR), help="Model registry directory")
     parser.add_argument("--version", help="Model version to evaluate (default: current)")
     parser.add_argument("--vs-random", type=int, default=100, help="Games vs random player")
+    parser.add_argument("--vs-heuristic", type=int, default=0, help="Games vs line-completing/blocking heuristic")
     parser.add_argument("--vs-version", help="Compare against another version")
     parser.add_argument("--games", type=int, default=100, help="Number of games for comparison")
     parser.add_argument("--device", default="cpu", help="Device to run on (cpu/cuda)")
@@ -51,6 +52,15 @@ def main():
             version=version, games=args.vs_random, device=args.device
         )
         r = results["vs_random"]
+        print(f"  Win: {r['win_rate']:.2%} | Loss: {r['loss_rate']:.2%} | Draw: {r['draw_rate']:.2%}")
+
+    if args.vs_heuristic > 0:
+        version = args.version or registry._index["current"]
+        print(f"Evaluating {version} vs Heuristic ({args.vs_heuristic} games)...")
+        results["vs_heuristic"] = evaluator.evaluate_vs_heuristic(
+            version=version, games=args.vs_heuristic, device=args.device
+        )
+        r = results["vs_heuristic"]
         print(f"  Win: {r['win_rate']:.2%} | Loss: {r['loss_rate']:.2%} | Draw: {r['draw_rate']:.2%}")
 
     if args.vs_version:

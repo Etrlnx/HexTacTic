@@ -138,6 +138,15 @@ class ModelEvaluator:
         """Evaluate a registered model against random play."""
         return evaluate_model_vs_random(self.registry.load_model(version), games, device)
 
+    def evaluate_vs_heuristic(
+        self,
+        version: Optional[str] = None,
+        games: int = 100,
+        device: str = "cpu",
+    ) -> Dict[str, Any]:
+        """Evaluate a registered model against the line-completing/blocking heuristic."""
+        return evaluate_model_vs_heuristic(self.registry.load_model(version), games, device)
+
     def evaluate_vs_previous(
         self,
         version: str,
@@ -166,13 +175,47 @@ def _greedy_move(model: torch.nn.Module, board, player: str, moves: list[int], d
     return masked_argmax(q_values, moves)
 
 
+def _points_if_played(board, row: int, col: int, label: str) -> int:
+    """New 3-cell lines `label` would score by playing (row, col); mirrors TicTacToeGame scoring."""
+    n = len(board)
+    points = 0
+    for dr, dc in ((0, 1), (1, 0), (1, 1), (1, -1)):
+        run = []
+        for sign in (1, -1):
+            r, c, length = row + sign * dr, col + sign * dc, 0
+            while 0 <= r < n and 0 <= c < n and board[r][c] == label:
+                length += 1
+                r, c = r + sign * dr, c + sign * dc
+            run.append(length)
+        forward, back = run
+        # 3-cell windows containing the new cell start at offset -2, -1 or 0.
+        points += sum(1 for start in (-2, -1, 0) if -start <= back and start + 2 <= forward)
+    return points
+
+
+def random_move(board, player: str, moves: list[int]) -> int:
+    return random.choice(moves)
+
+
+def heuristic_move(board, player: str, moves: list[int]) -> int:
+    """Score the most points if possible, else block the opponent's best line, else play randomly."""
+    opponent = "O" if player == "X" else "X"
+    for label in (player, opponent):
+        gains = {m: _points_if_played(board, m // cfg.BOARD_SIZE, m % cfg.BOARD_SIZE, label) for m in moves}
+        best = max(gains.values())
+        if best > 0:
+            return random.choice([m for m, g in gains.items() if g == best])
+    return random.choice(moves)
+
+
 def play_match(
     model_a: torch.nn.Module,
     model_b: Optional[torch.nn.Module],
     games: int,
     device: str = "cpu",
+    opponent=random_move,
 ) -> tuple[int, int, int]:
-    """Play greedy model_a vs model_b (None = uniform random), alternating who opens.
+    """Play greedy model_a vs model_b (None = `opponent` policy, default uniform random), alternating who opens.
 
     Returns (a_wins, b_wins, draws).
     """
@@ -191,7 +234,7 @@ def play_match(
             moves = valid_move_indices(game._current_moves)
             model = model_a if current == a_plays else model_b
             if model is None:
-                action = random.choice(moves)
+                action = opponent(game._current_moves, current, moves)
             else:
                 action = _greedy_move(model, game._current_moves, current, moves, device)
             game.process_move(action // cfg.BOARD_SIZE, action % cfg.BOARD_SIZE)
@@ -207,7 +250,15 @@ def play_match(
 
 def evaluate_model_vs_random(model: torch.nn.Module, games: int = 100, device: str = "cpu") -> Dict[str, Any]:
     """Win/loss/draw rates of a model (not necessarily registered) against random play."""
-    wins, losses, draws = play_match(model, None, games, device)
+    return _rates(*play_match(model, None, games, device), games)
+
+
+def evaluate_model_vs_heuristic(model: torch.nn.Module, games: int = 100, device: str = "cpu") -> Dict[str, Any]:
+    """Win/loss/draw rates of a model against heuristic_move (a much stronger bar than random)."""
+    return _rates(*play_match(model, None, games, device, opponent=heuristic_move), games)
+
+
+def _rates(wins: int, losses: int, draws: int, games: int) -> Dict[str, Any]:
     return {
         "wins": wins,
         "losses": losses,

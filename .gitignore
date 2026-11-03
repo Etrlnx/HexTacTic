@@ -14,3 +14,11 @@ build/
 # IDE / OS Settings
 .vscode/
 .DS_Store
+
+# Knowledge Graph (local project context)
+knowledge-graph/
+
+# Training output (TensorBoard logs, checkpoints). Only the promoted best model is tracked.
+logs/
+saved_models/*
+!saved_models/best_model.pt

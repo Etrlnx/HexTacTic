@@ -1,0 +1,16 @@
+# API server
+fastapi
+uvicorn[standard]
+pydantic
+structlog
+slowapi
+prometheus-client
+psycopg2-binary
+numpy
+torch
+
+# Training only (mimika.trainer_enhanced)
+tensorboard
+
+# Tests (tests/test_core.py uses FastAPI TestClient)
+httpx

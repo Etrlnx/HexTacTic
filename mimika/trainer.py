@@ -1,118 +1,100 @@
-import torch
-from script import TicTacToeGame
-from .agent import DQNAgent
-from .config import DQNconf as cfg
-import numpy as np
-import os
+import argparse
 
-# NN uses a tensor of dims (Channels, height, width) -> (3,6,6)
-# Channel 0 -> board state spaces: 1 = empty  | 0 = marked
-# Channel 1 -> position of player's moves: 1 = yes | 0 = no
-# Channel 2 -> position of opponent's moves: 1 = yes | 0 = no
-# This function converts the game board to a 4D PyTorch tensor 
-def preproc_s(board_state: list, curr_player: str) -> torch.Tensor:
-    
-    
-    bnp = np.array(board_state)
-    opp = "O" if curr_player == "X" else "X"
-    
-    empty = (bnp == "").astype(np.float32)
-    playerchan = (bnp == curr_player).astype(np.float32)
-    oppchan = (bnp == opp).astype(np.float32)
-    
-    stackstate = np.stack([empty, playerchan, oppchan], axis = 0) # feature matrix
-    tensorstate = torch.FloatTensor(stackstate).unsqueeze(0)      # matrix -> tensor, dimensions: (1,3,6,6) 
-    # 4- dimensional tensors are more batch-efficient to train in the GPU and reduces training complexity
-    return tensorstate
+import torch
+
+from script import TicTacToeGame
+
+from .agent import DQNAgent
+from .board_encoding import encode_board, valid_move_indices
+from .config import DQNconf as cfg
+from .model_registry import DEFAULT_REGISTRY_DIR
+
+WEIGHTS_PATH = DEFAULT_REGISTRY_DIR / "dqn_model_weights.pth"
+
+STEP_PENALTY = -0.1
+POINT_REWARD = 10.0
+WIN_REWARD = 30.0
+
+
+def play_episode(agent, total_steps=0):
+    """Play one self-play game, storing one transition per move from the mover's perspective.
+
+    A player's transition is closed only when that player is about to move again, so
+    next_state is the position the same player actually faces after the opponent's reply.
+    Points the opponent scores in that reply are subtracted from the transition's reward,
+    and the final move of each player gets the +/- WIN_REWARD terminal outcome.
+
+    Returns (episode_reward, length, losses, total_steps).
+    """
+    game = TicTacToeGame()
+    pending = {}  # player -> [state, action, reward] awaiting its next_state
+    episode_reward = 0.0
+    length = 0
+    losses = []
+
+    def learn():
+        loss = agent.optimality()
+        if loss is not None:
+            losses.append(loss)
+
+    while not game._has_winner and not game.is_tied():
+        player = game.current_player
+        opponent = "O" if player == "X" else "X"
+        state = encode_board(game._current_moves, player)
+
+        if player in pending:
+            prev_state, prev_action, prev_reward = pending.pop(player)
+            agent.memory.append((prev_state, prev_action, prev_reward, state, False))
+
+        action = agent.action_s(state, valid_move_indices(game._current_moves))
+        before = game.scores[player]
+        game.process_move(action // cfg.BOARD_SIZE, action % cfg.BOARD_SIZE)
+        gained = game.scores[player] - before
+
+        reward = STEP_PENALTY + POINT_REWARD * gained
+        episode_reward += reward
+        pending[player] = [state, action, reward]
+        if opponent in pending:
+            pending[opponent][2] -= POINT_REWARD * gained
+
+        learn()
+        length += 1
+        total_steps += 1
+        if total_steps % cfg.TARGET_UPD_FREQ == 0:
+            agent.update_target_network()
+
+    # next_state of a terminal transition is ignored by the target (done=True).
+    terminal_state = encode_board(game._current_moves, "X")
+    for player, (state, action, reward) in pending.items():
+        if game._has_winner:
+            reward += WIN_REWARD if game.current_player == player else -WIN_REWARD
+        agent.memory.append((state, action, reward, terminal_state, True))
+
+    for _ in range(10):
+        learn()
+
+    return episode_reward, length, losses, total_steps
 
 
 def train(episodes=10000):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     agent = DQNAgent(device)
-    totsteps = 0
-    
-    for ep in range(episodes):
-        game = TicTacToeGame()
-        hist = {
-            "X": {"state": None, "action": None, "score": 0, "reward": 0.0},
-            "O": {"state": None, "action": None, "score": 0, "reward": 0.0}
-        }
+    total_steps = 0
+    WEIGHTS_PATH.parent.mkdir(parents=True, exist_ok=True)
 
-        # Game loop
-        while not game._has_winner and not game.is_tied():
-            curr_p = game.current_player
-            opp_p = "O" if curr_p == "X" else "X"
-            
-            valmoves = []
-            for r in range(cfg.BOARD_SIZE):
-                for c in range(cfg.BOARD_SIZE):
-                    if game.is_valid_move(r, c):
-                        valmoves.append(r * cfg.BOARD_SIZE + c)
-            
-            if not valmoves:
-                break
-        
-            statetensor = preproc_s(game._current_moves, curr_p)
-            actionidx = agent.action_s(statetensor, valmoves)
-            row, col = actionidx // cfg.BOARD_SIZE, actionidx % cfg.BOARD_SIZE
-            
-            # Record opponent transition once active player responds
-            if hist[opp_p]['state'] is not None:
-                agent.memory.append((hist[opp_p]['state'], hist[opp_p]['action'], hist[opp_p]['reward'], statetensor, False))
-            
-            prevscore = game.scores[curr_p]
-            game.process_move(row, col)
-            newscore = game.scores[curr_p]
-            
-            # Intermediate line rewards
-            ptsgained = newscore - prevscore
-            stepreward = -0.1 + (ptsgained * 10.0)
-            
-            hist[curr_p]['state'] = statetensor
-            hist[curr_p]['action'] = actionidx
-            hist[curr_p]['score'] = newscore
-            hist[curr_p]['reward'] = stepreward
-            
-            # In-step training pass
-            agent.optimality()
-            totsteps += 1
-            
-            if totsteps % cfg.TARGET_UPD_FREQ == 0:
-                agent.update_target_network()
-                
-        # 1. Terminal state recording
-        dummyfinal = preproc_s(game._current_moves, 'X')
-        for p in ['X', 'O']:
-            if hist[p]['state'] is not None:
-                if game._has_winner:
-                    finalr = 30.0 if game.scores[p] >= 3 else -30.0
-                else:
-                    finalr = 0.0
-                    
-                agent.memory.append((
-                    hist[p]["state"],
-                    hist[p]["action"],
-                    finalr,
-                    dummyfinal,
-                    True
-                ))
-
-        # 2. Terminal transition training step (10 batch passes to consolidate game-ending rewards)
-        for _ in range(10):
-            agent.optimality()
-
-        # Decay exploration rate
+    for episode in range(episodes):
+        _, _, _, total_steps = play_episode(agent, total_steps)
         agent.epsilon = max(cfg.EPS_MIN, agent.epsilon * cfg.EPS_DECAY)
-        
-        # Periodic status update & periodic model checkpointing
-        if (ep + 1) % 500 == 0:
-            print(f"Episode {ep + 1}/{episodes} | Epsilon: {agent.epsilon:.4f}")
-            os.makedirs("saved_models", exist_ok=True)
-            torch.save(agent.policynet.state_dict(), "saved_models/dqn_model_weights.pth")
-            
-    
-    # Final save upon training completion
-    os.makedirs("saved_models", exist_ok=True)
-    torch.save(agent.policynet.state_dict(), "saved_models/dqn_model_weights.pth")    
-    print("Training complete! Model weights saved to saved_models/dqn_model_weights.pth")
-    print("Donezo")
+
+        if (episode + 1) % 500 == 0:
+            print(f"Episode {episode + 1}/{episodes} | Epsilon: {agent.epsilon:.4f}")
+            torch.save(agent.policynet.state_dict(), WEIGHTS_PATH)
+
+    torch.save(agent.policynet.state_dict(), WEIGHTS_PATH)
+    print(f"Training complete! Model weights saved to {WEIGHTS_PATH}")
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Train Mimika with plain DDQN self-play")
+    parser.add_argument("--episodes", type=int, default=10000)
+    train(parser.parse_args().episodes)

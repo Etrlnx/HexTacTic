@@ -8,13 +8,13 @@ sequenceDiagram
     participant DB as PostgreSQL DB (database.py)
 
     %% Session Setup & Stats Fetch
-    Player->>API: GET /api/player/{username}
+    Player->>API: GET /api/v1/player/{username}
     API->>DB: SELECT * FROM player_scoreboard WHERE username
     DB-->>API: Return Row (highest_difficulty, total_wins, etc.)
     API-->>Player: Return Player Profile (Unlocks Nightmare if Hard reached)
 
     %% Game Initiation
-    Player->>API: POST /api/start
+    Player->>API: POST /api/v1/start
     API->>Rules: reset_game() and configure mode or difficulty
     
     opt Player selected "O" (AI goes first as "X")
@@ -26,7 +26,7 @@ sequenceDiagram
     API-->>Player: Return Initialized State
 
     %% Move Execution Sequence
-    Player->>API: POST /api/move
+    Player->>API: POST /api/v1/move
     API->>Rules: "is_valid_move(row, col)"
     
     alt Move is Invalid
@@ -38,7 +38,7 @@ sequenceDiagram
         
         alt Match Decided (Win / Loss / Draw)
             API-->>Player: Return Final State
-            Player->>API: POST /api/record-match
+            Player->>API: POST /api/v1/record-match
             API->>DB: UPSERT player_scoreboard
             DB-->>API: Updated Scoreboard Row
             API-->>Player: Return Updated Player Profile
@@ -49,7 +49,7 @@ sequenceDiagram
             API->>Rules: process_move(ai_row, ai_col)
             
             opt AI Move Ends Game
-                Player->>API: POST /api/record-match
+                Player->>API: POST /api/v1/record-match
                 API->>DB: UPSERT player_scoreboard
                 DB-->>API: Updated Row
             end
